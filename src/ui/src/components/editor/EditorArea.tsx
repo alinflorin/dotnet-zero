@@ -1,8 +1,8 @@
-import { useState } from "react"
 import Editor from "@monaco-editor/react"
 import { makeStyles, tokens, Text } from "@fluentui/react-components"
 import { useTranslation } from "react-i18next"
 import { useThemeMode } from "../../app/theme/theme-context"
+import { useProject } from "../../app/project/project-context"
 import { CSHARP_LANGUAGE_ID } from "../../app/monaco/setup"
 import { EditorTabs, type EditorFile } from "./EditorTabs"
 
@@ -29,47 +29,31 @@ const useStyles = makeStyles({
   },
 })
 
-const initialFiles: (EditorFile & { content: string })[] = [
-  {
-    id: "program",
-    name: "Program.cs",
-    language: CSHARP_LANGUAGE_ID,
-    content: [
-      "// Welcome to Zero",
-      "Console.WriteLine(\"Hello, Zero!\");",
-      "",
-    ].join("\n"),
-  },
-]
-
 export function EditorArea() {
   const styles = useStyles()
   const { t } = useTranslation()
   const { resolvedMode } = useThemeMode()
-  const [files, setFiles] = useState(initialFiles)
-  const [activeId, setActiveId] = useState<string | null>(initialFiles[0]?.id ?? null)
+  const { openFiles, activeFileId, dirtyFileIds, setActiveFile, closeFile, updateFileContent } = useProject()
 
-  const activeFile = files.find((file) => file.id === activeId) ?? null
+  const activeFile = openFiles.find((file) => file.id === activeFileId) ?? null
 
-  const handleClose = (id: string) => {
-    setFiles((prev) => {
-      const next = prev.filter((file) => file.id !== id)
-      if (activeId === id) {
-        setActiveId(next[next.length - 1]?.id ?? null)
-      }
-      return next
-    })
-  }
+  const tabs: EditorFile[] = openFiles.map((file) => ({
+    id: file.id,
+    name: file.name,
+    language: CSHARP_LANGUAGE_ID,
+    isDirty: dirtyFileIds.has(file.id),
+  }))
 
   return (
     <div className={styles.root}>
-      <EditorTabs files={files} activeId={activeId} onSelect={setActiveId} onClose={handleClose} />
+      <EditorTabs files={tabs} activeId={activeFileId} onSelect={setActiveFile} onClose={closeFile} />
       {activeFile ? (
         <div className={styles.editorHost}>
           <Editor
             path={activeFile.id}
-            defaultLanguage={activeFile.language}
-            defaultValue={activeFile.content}
+            defaultLanguage={CSHARP_LANGUAGE_ID}
+            value={activeFile.content}
+            onChange={(value) => updateFileContent(activeFile.id, value ?? "")}
             theme={resolvedMode === "dark" ? "vs-dark" : "light"}
             options={{
               fontSize: 13,

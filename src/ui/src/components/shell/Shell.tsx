@@ -1,15 +1,20 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { makeStyles, tokens, mergeClasses } from "@fluentui/react-components"
 import { TitleBar } from "./TitleBar"
 import { ActivityBar, type ActivityView } from "./ActivityBar"
 import { SideBar } from "./SideBar"
 import { StatusBar } from "./StatusBar"
 import { EditorArea } from "../editor/EditorArea"
+import { Panel } from "../panel/Panel"
+import { useResizablePane } from "../../hooks/useResizablePane"
 
 const MOBILE_QUERY = "(max-width: 768px)"
 const DEFAULT_SIDEBAR_WIDTH = 260
 const MIN_SIDEBAR_WIDTH = 180
 const MAX_SIDEBAR_WIDTH = 480
+const DEFAULT_PANEL_HEIGHT = 220
+const MIN_PANEL_HEIGHT = 120
+const MAX_PANEL_HEIGHT = 640
 
 const useStyles = makeStyles({
   root: {
@@ -20,6 +25,12 @@ const useStyles = makeStyles({
     overflow: "hidden",
     backgroundColor: tokens.colorNeutralBackground1,
     color: tokens.colorNeutralForeground1,
+  },
+  main: {
+    display: "flex",
+    flexDirection: "column",
+    flexGrow: 1,
+    minHeight: 0,
   },
   workbench: {
     display: "flex",
@@ -44,7 +55,6 @@ const useStyles = makeStyles({
   },
   resizing: {
     userSelect: "none",
-    cursor: "col-resize",
   },
 })
 
@@ -66,9 +76,24 @@ export function Shell() {
   const [activeView, setActiveView] = useState<ActivityView>("explorer")
   const isMobile = useIsMobile()
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH)
-  const [resizing, setResizing] = useState(false)
-  const resizeStartRef = useRef<{ x: number; width: number } | null>(null)
+  const [panelOpen, setPanelOpen] = useState(false)
+
+  const sidebarPane = useResizablePane({
+    axis: "horizontal",
+    initialSize: DEFAULT_SIDEBAR_WIDTH,
+    min: MIN_SIDEBAR_WIDTH,
+    max: MAX_SIDEBAR_WIDTH,
+  })
+
+  const panelPane = useResizablePane({
+    axis: "vertical",
+    initialSize: DEFAULT_PANEL_HEIGHT,
+    min: MIN_PANEL_HEIGHT,
+    max: MAX_PANEL_HEIGHT,
+    invert: true,
+  })
+
+  const isResizing = sidebarPane.resizing || panelPane.resizing
 
   const handleSelectView = useCallback(
     (view: ActivityView) => {
@@ -82,61 +107,45 @@ export function Shell() {
     setSidebarOpen((open) => !open)
   }, [])
 
-  const handleResizeStart = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
-      resizeStartRef.current = { x: event.clientX, width: sidebarWidth }
-      setResizing(true)
-    },
-    [sidebarWidth],
-  )
-
-  useEffect(() => {
-    if (!resizing) return
-
-    const handleMove = (event: PointerEvent) => {
-      const start = resizeStartRef.current
-      if (!start) return
-      const next = start.width + (event.clientX - start.x)
-      setSidebarWidth(Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, next)))
-    }
-    const handleUp = () => {
-      resizeStartRef.current = null
-      setResizing(false)
-    }
-
-    window.addEventListener("pointermove", handleMove)
-    window.addEventListener("pointerup", handleUp)
-    return () => {
-      window.removeEventListener("pointermove", handleMove)
-      window.removeEventListener("pointerup", handleUp)
-    }
-  }, [resizing])
+  const handleTogglePanel = useCallback(() => {
+    setPanelOpen((open) => !open)
+  }, [])
 
   return (
-    <div className={mergeClasses(styles.root, resizing && styles.resizing)}>
+    <div className={mergeClasses(styles.root, isResizing && styles.resizing)}>
       <TitleBar onToggleSidebar={handleToggleSidebar} showSidebarToggle={isMobile} />
-      <div className={styles.workbench}>
-        <ActivityBar active={activeView} onSelect={handleSelectView} />
-        {isMobile ? (
-          sidebarOpen && (
-            <>
-              <div className={styles.sidebarOverlay} onClick={() => setSidebarOpen(false)} />
-              <div className={styles.sidebarMobile}>
-                <SideBar view={activeView} width={DEFAULT_SIDEBAR_WIDTH} />
-              </div>
-            </>
-          )
-        ) : (
-          <SideBar
-            view={activeView}
-            width={sidebarWidth}
-            onResizeStart={handleResizeStart}
-            resizing={resizing}
+      <div className={styles.main}>
+        <div className={styles.workbench}>
+          <ActivityBar active={activeView} onSelect={handleSelectView} />
+          {isMobile ? (
+            sidebarOpen && (
+              <>
+                <div className={styles.sidebarOverlay} onClick={() => setSidebarOpen(false)} />
+                <div className={styles.sidebarMobile}>
+                  <SideBar view={activeView} width={DEFAULT_SIDEBAR_WIDTH} />
+                </div>
+              </>
+            )
+          ) : (
+            <SideBar
+              view={activeView}
+              width={sidebarPane.size}
+              onResizeStart={sidebarPane.handleResizeStart}
+              resizing={sidebarPane.resizing}
+            />
+          )}
+          <EditorArea />
+        </div>
+        {panelOpen && (
+          <Panel
+            height={panelPane.size}
+            onResizeStart={panelPane.handleResizeStart}
+            resizing={panelPane.resizing}
+            onClose={() => setPanelOpen(false)}
           />
         )}
-        <EditorArea />
       </div>
-      <StatusBar />
+      <StatusBar panelOpen={panelOpen} onTogglePanel={handleTogglePanel} />
     </div>
   )
 }

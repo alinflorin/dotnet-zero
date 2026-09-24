@@ -1,0 +1,39 @@
+using engine.Workspace;
+using Microsoft.JSInterop;
+
+namespace engine.Api;
+
+public static class ProjectApi
+{
+    private static readonly ProjectWorkspace Workspace = new();
+
+    [JSInvokable]
+    public static ProjectDto CreateProject(string name) => Workspace.CreateProject(name);
+
+    [JSInvokable]
+    public static ProjectDto HydrateProject(ProjectSnapshot snapshot) => Workspace.HydrateProject(snapshot);
+
+    [JSInvokable]
+    public static Task<ProjectSnapshot> GetSnapshot() => Workspace.GetSnapshotAsync();
+
+    [JSInvokable]
+    public static IReadOnlyList<ProjectFileNode> GetFileTree() => Workspace.GetFileTree();
+
+    [JSInvokable]
+    public static Task<string> GetFileContent(string fileId) => Workspace.GetFileContentAsync(fileId);
+
+    [JSInvokable]
+    public static IReadOnlyList<ProjectFileNode> AddFile(string? parentPath, string name) => Workspace.AddFile(parentPath, name);
+
+    [JSInvokable]
+    public static IReadOnlyList<ProjectFileNode> AddFolder(string? parentPath, string name) => Workspace.AddFolder(parentPath, name);
+
+    [JSInvokable]
+    public static void UpdateFileContent(string fileId, string content) => Workspace.UpdateFileContent(fileId, content);
+
+    [JSInvokable]
+    public static IReadOnlyList<ProjectFileNode> RenameEntry(string id, string newName) => Workspace.RenameEntry(id, newName);
+
+    [JSInvokable]
+    public static IReadOnlyList<ProjectFileNode> DeleteEntry(string id) => Workspace.DeleteEntry(id);
+}

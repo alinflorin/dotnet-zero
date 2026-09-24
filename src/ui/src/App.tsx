@@ -1,19 +1,23 @@
 import { useEffect } from "react"
 import { ThemeProvider } from "./app/theme/ThemeProvider"
+import { ProjectProvider } from "./app/project/ProjectProvider"
+import { LogProvider } from "./app/panel/LogProvider"
 import { Shell } from "./components/shell/Shell"
+import { ensureBlazorReady } from "./app/blazor/blazorReady"
 import "./app/i18n/i18n"
 
 function App() {
   useEffect(() => {
-    (async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (window as any).Blazor.start();
-    })();
-  }, []);
+    void ensureBlazorReady()
+  }, [])
 
   return (
     <ThemeProvider>
-      <Shell />
+      <ProjectProvider>
+        <LogProvider>
+          <Shell />
+        </LogProvider>
+      </ProjectProvider>
     </ThemeProvider>
   )
 }

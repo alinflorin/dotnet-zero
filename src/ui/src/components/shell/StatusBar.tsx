@@ -1,5 +1,8 @@
-import { makeStyles, tokens, Text } from "@fluentui/react-components"
+import { makeStyles, tokens, Text, Button, mergeClasses } from "@fluentui/react-components"
+import { PanelBottomRegular, PanelBottomFilled, bundleIcon } from "@fluentui/react-icons"
 import { useTranslation } from "react-i18next"
+
+const PanelBottom = bundleIcon(PanelBottomFilled, PanelBottomRegular)
 
 const useStyles = makeStyles({
   root: {
@@ -9,7 +12,7 @@ const useStyles = makeStyles({
     height: "22px",
     flexShrink: 0,
     paddingLeft: tokens.spacingHorizontalM,
-    paddingRight: tokens.spacingHorizontalM,
+    paddingRight: tokens.spacingHorizontalXS,
     backgroundColor: tokens.colorBrandBackground,
     color: tokens.colorNeutralForegroundOnBrand,
   },
@@ -22,9 +25,24 @@ const useStyles = makeStyles({
     alignItems: "center",
     columnGap: tokens.spacingHorizontalM,
   },
+  panelToggle: {
+    minWidth: "20px",
+    width: "20px",
+    height: "20px",
+    color: tokens.colorNeutralForegroundOnBrand,
+  },
+  panelToggleActive: {
+    backgroundColor: tokens.colorNeutralForegroundOnBrand,
+    color: tokens.colorBrandBackground,
+  },
 })
 
-export function StatusBar() {
+interface StatusBarProps {
+  panelOpen?: boolean
+  onTogglePanel?: () => void
+}
+
+export function StatusBar({ panelOpen, onTogglePanel }: StatusBarProps) {
   const styles = useStyles()
   const { t } = useTranslation()
 
@@ -35,6 +53,18 @@ export function StatusBar() {
       </div>
       <div className={styles.group}>
         <Text className={styles.text}>UTF-8</Text>
+        {onTogglePanel && (
+          <Button
+            appearance="transparent"
+            size="small"
+            className={mergeClasses(styles.panelToggle, panelOpen && styles.panelToggleActive)}
+            icon={<PanelBottom />}
+            aria-pressed={panelOpen}
+            aria-label={t("panel.toggle")}
+            title={t("panel.toggle")}
+            onClick={onTogglePanel}
+          />
+        )}
       </div>
     </div>
   )

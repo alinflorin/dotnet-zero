@@ -38,9 +38,12 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // The Blazor WASM framework files are large and change per build;
-        // keep them out of the precache and let the browser cache handle them.
-        globIgnores: ['_framework/**/*'],
+        // The Blazor WASM framework files (now including Roslyn + reference
+        // assemblies) are large and change per build; keep them out of the
+        // precache and let the browser cache handle them.
+        globIgnores: ['_framework/**/*', 'engine/_framework/**/*'],
+        // The Monaco workers and app bundle legitimately exceed the 2 MiB default.
+        maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
       },
     }),
   ],

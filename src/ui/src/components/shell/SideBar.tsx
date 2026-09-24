@@ -2,7 +2,6 @@ import {
   makeStyles,
   tokens,
   Text,
-  Button,
   RadioGroup,
   Radio,
   Label,
@@ -11,6 +10,7 @@ import {
 import { useTranslation } from "react-i18next"
 import type { ActivityView } from "./ActivityBar"
 import { useThemeMode, type ThemeMode } from "../../app/theme/theme-context"
+import { ExplorerPanel } from "../explorer/ExplorerPanel"
 
 const useStyles = makeStyles({
   root: {
@@ -48,7 +48,7 @@ const useStyles = makeStyles({
     rowGap: tokens.spacingVerticalM,
     padding: tokens.spacingHorizontalM,
   },
-  settingsBody: {
+  stretchBody: {
     alignItems: "stretch",
     justifyContent: "flex-start",
   },
@@ -56,11 +56,6 @@ const useStyles = makeStyles({
     display: "flex",
     flexDirection: "column",
     rowGap: tokens.spacingVerticalS,
-  },
-  emptyText: {
-    color: tokens.colorNeutralForeground3,
-    fontSize: tokens.fontSizeBase200,
-    textAlign: "center",
   },
   resizeHandle: {
     position: "absolute",
@@ -142,15 +137,8 @@ export function SideBar({ view, width, onResizeStart, resizing }: SideBarProps) 
       <div className={styles.header}>
         <Text className={styles.headerText}>{t(titleKeyByView[view] ?? "sidebar.explorer.title")}</Text>
       </div>
-      <div className={mergeClasses(styles.body, view === "settings" && styles.settingsBody)}>
-        {view === "explorer" && (
-          <>
-            <Text className={styles.emptyText}>{t("sidebar.noFolder")}</Text>
-            <Button appearance="primary" size="small">
-              {t("sidebar.openFolder")}
-            </Button>
-          </>
-        )}
+      <div className={mergeClasses(styles.body, (view === "settings" || view === "explorer") && styles.stretchBody)}>
+        {view === "explorer" && <ExplorerPanel />}
         {view === "settings" && <SettingsPanel />}
       </div>
       {onResizeStart && (
