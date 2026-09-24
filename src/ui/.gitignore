@@ -6,7 +6,7 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
-public/engine/*
+public/_framework/*
 node_modules
 dist
 dist-ssr

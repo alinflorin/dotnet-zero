@@ -6,7 +6,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <OverrideHtmlAssetPlaceholders>true</OverrideHtmlAssetPlaceholders>
     <CompressionEnabled>false</CompressionEnabled>
-    <EngineWebAssetsOutputPath>$(MSBuildProjectDirectory)\..\ui\public\engine\</EngineWebAssetsOutputPath>
+    <StaticWebAssetFingerprintingEnabled>false</StaticWebAssetFingerprintingEnabled>
+    <WasmFingerprintAssets>false</WasmFingerprintAssets>
+    <BlazorFingerprintBlazorJs>false</BlazorFingerprintBlazorJs>
+    <EngineWebAssetsOutputPath>$(MSBuildProjectDirectory)\..\ui\public\</EngineWebAssetsOutputPath>
   </PropertyGroup>
 
   <ItemGroup>
