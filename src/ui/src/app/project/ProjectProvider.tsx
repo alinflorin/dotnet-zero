@@ -5,7 +5,7 @@ import { ensureBlazorReady } from "../blazor/blazorReady"
 import { ProjectContext, type OpenFile, type ProjectStatus } from "./project-context"
 import { loadProjectSnapshot, saveProjectSnapshot } from "./persistence"
 import { findFirstFile, flattenFiles } from "./treeUtils"
-import type { ProjectDto, ProjectFileNode, ProjectSnapshot } from "./types"
+import type { ProjectDto, ProjectFileNode, ProjectSnapshot, RunResult } from "./types"
 
 const SYNC_DEBOUNCE_MS = 500
 
@@ -115,17 +115,15 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     setEditorState((prev) => ({ ...prev, activeFileId: fileId }))
   }, [])
 
-  const debouncedSync = useDebouncedCallback((fileId: string, content: string) => {
-    void (async () => {
-      await invoke<void>("UpdateFileContent", fileId, content)
-      await persistSnapshot()
-      setDirtyFileIds((prev) => {
-        if (!prev.has(fileId)) return prev
-        const next = new Set(prev)
-        next.delete(fileId)
-        return next
-      })
-    })()
+  const [debouncedSync, flushSync] = useDebouncedCallback(async (fileId: string, content: string) => {
+    await invoke<void>("UpdateFileContent", fileId, content)
+    await persistSnapshot()
+    setDirtyFileIds((prev) => {
+      if (!prev.has(fileId)) return prev
+      const next = new Set(prev)
+      next.delete(fileId)
+      return next
+    })
   }, SYNC_DEBOUNCE_MS)
 
   const updateFileContent = useCallback(
@@ -176,6 +174,11 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     [invoke, applyTree, persistSnapshot],
   )
 
+  const runProject = useCallback(async () => {
+    await flushSync()
+    return invoke<RunResult>("CompileAndRun")
+  }, [invoke, flushSync])
+
   const value = useMemo(
     () => ({
       status,
@@ -192,6 +195,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       addFolder,
       renameEntry,
       deleteEntry,
+      runProject,
     }),
     [
       status,
@@ -207,6 +211,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       addFolder,
       renameEntry,
       deleteEntry,
+      runProject,
     ],
   )
 

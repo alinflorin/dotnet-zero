@@ -31,6 +31,10 @@
   "panel.empty": "Niciun rezultat încă.",
   "panel.close": "Închide panoul",
   "panel.toggle": "Comută panoul",
+  "run.run": "Rulează",
+  "run.compiling": "Se compilează…",
+  "run.failed": "Compilarea a eșuat.",
+  "run.finished": "Programul s-a încheiat.",
   "common.cancel": "Anulează",
   "common.create": "Creează"
 }

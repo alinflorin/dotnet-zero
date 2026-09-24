@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
+using System.Reflection;
 using Basic.Reference.Assemblies;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -142,6 +143,82 @@ public sealed class ProjectWorkspace
         }
 
         return BuildTree();
+    }
+
+    public async Task<RunResult> CompileAndRunAsync()
+    {
+        EnsureProject();
+        var compilation = await CurrentProject().GetCompilationAsync().ConfigureAwait(false)
+            ?? throw new InvalidOperationException("Compilation unavailable.");
+
+        using var peStream = new MemoryStream();
+        var emitResult = compilation.Emit(peStream);
+        var diagnostics = emitResult.Diagnostics
+            .Where(d => d.Severity != DiagnosticSeverity.Hidden)
+            .Select(ToCompileDiagnostic)
+            .ToList();
+
+        if (!emitResult.Success)
+            return new RunResult(false, diagnostics, "", null);
+
+        var assembly = Assembly.Load(peStream.ToArray());
+        var entryPoint = assembly.EntryPoint;
+        if (entryPoint is null)
+            return new RunResult(false, diagnostics, "", "No entry point (Main method) found.");
+
+        var previousOut = Console.Out;
+        var previousError = Console.Error;
+        var writer = new StringWriter();
+        Console.SetOut(writer);
+        Console.SetError(writer);
+
+        string? exceptionMessage = null;
+        try
+        {
+            var parameters = entryPoint.GetParameters().Length == 0 ? null : new object?[] { Array.Empty<string>() };
+            var result = entryPoint.Invoke(null, parameters);
+            if (result is Task task)
+                await task.ConfigureAwait(false);
+        }
+        catch (TargetInvocationException ex)
+        {
+            exceptionMessage = (ex.InnerException ?? ex).ToString();
+        }
+        catch (Exception ex)
+        {
+            exceptionMessage = ex.ToString();
+        }
+        finally
+        {
+            Console.SetOut(previousOut);
+            Console.SetError(previousError);
+        }
+
+        return new RunResult(exceptionMessage is null, diagnostics, writer.ToString(), exceptionMessage);
+    }
+
+    private CompileDiagnostic ToCompileDiagnostic(Diagnostic diagnostic)
+    {
+        var lineSpan = diagnostic.Location.GetLineSpan();
+        string? fileId = null;
+        string? fileName = null;
+        if (diagnostic.Location.SourceTree is { } tree)
+        {
+            var document = CurrentProject().GetDocument(tree);
+            if (document is not null)
+            {
+                fileId = _fileIdByDocId.GetValueOrDefault(document.Id);
+                fileName = document.Name;
+            }
+        }
+
+        return new CompileDiagnostic(
+            diagnostic.Severity.ToString().ToLowerInvariant(),
+            diagnostic.GetMessage(),
+            fileId,
+            fileName,
+            lineSpan.StartLinePosition.Line + 1,
+            lineSpan.StartLinePosition.Character + 1);
     }
 
     [MemberNotNull(nameof(_workspace))]

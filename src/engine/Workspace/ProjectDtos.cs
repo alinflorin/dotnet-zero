@@ -7,3 +7,7 @@ public sealed record ProjectDto(string Id, string Name, IReadOnlyList<ProjectFil
 public sealed record ProjectFileSnapshot(string Id, string Name, IReadOnlyList<string> Folders, string Content);
 
 public sealed record ProjectSnapshot(string Id, string Name, IReadOnlyList<ProjectFileSnapshot> Files, IReadOnlyList<string> EmptyFolders);
+
+public sealed record CompileDiagnostic(string Severity, string Message, string? FileId, string? FileName, int Line, int Column);
+
+public sealed record RunResult(bool Success, IReadOnlyList<CompileDiagnostic> Diagnostics, string Output, string? ExceptionMessage);

@@ -31,6 +31,10 @@
   "panel.empty": "No output yet.",
   "panel.close": "Close panel",
   "panel.toggle": "Toggle panel",
+  "run.run": "Run",
+  "run.compiling": "Compiling…",
+  "run.failed": "Build failed.",
+  "run.finished": "Program finished.",
   "common.cancel": "Cancel",
   "common.create": "Create"
 }

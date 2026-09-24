@@ -26,3 +26,19 @@ export interface ProjectSnapshot {
   files: ProjectFileSnapshot[]
   emptyFolders: string[]
 }
+
+export interface CompileDiagnostic {
+  severity: string
+  message: string
+  fileId: string | null
+  fileName: string | null
+  line: number
+  column: number
+}
+
+export interface RunResult {
+  success: boolean
+  diagnostics: CompileDiagnostic[]
+  output: string
+  exceptionMessage: string | null
+}

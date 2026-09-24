@@ -36,4 +36,7 @@ public static class ProjectApi
 
     [JSInvokable]
     public static IReadOnlyList<ProjectFileNode> DeleteEntry(string id) => Workspace.DeleteEntry(id);
+
+    [JSInvokable]
+    public static Task<RunResult> CompileAndRun() => Workspace.CompileAndRunAsync();
 }

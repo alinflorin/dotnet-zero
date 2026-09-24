@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
 import { makeStyles, tokens, mergeClasses } from "@fluentui/react-components"
+import { useTranslation } from "react-i18next"
 import { TitleBar } from "./TitleBar"
 import { ActivityBar, type ActivityView } from "./ActivityBar"
 import { SideBar } from "./SideBar"
@@ -7,6 +8,8 @@ import { StatusBar } from "./StatusBar"
 import { EditorArea } from "../editor/EditorArea"
 import { Panel } from "../panel/Panel"
 import { useResizablePane } from "../../hooks/useResizablePane"
+import { useProject } from "../../app/project/project-context"
+import { useLog } from "../../app/panel/log-context"
 
 const MOBILE_QUERY = "(max-width: 768px)"
 const DEFAULT_SIDEBAR_WIDTH = 260
@@ -73,10 +76,42 @@ function useIsMobile() {
 
 export function Shell() {
   const styles = useStyles()
+  const { t } = useTranslation()
+  const { runProject } = useProject()
+  const { appendLine, clear } = useLog()
   const [activeView, setActiveView] = useState<ActivityView>("explorer")
   const isMobile = useIsMobile()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [panelOpen, setPanelOpen] = useState(false)
+  const [isRunning, setIsRunning] = useState(false)
+
+  const handleRun = useCallback(async () => {
+    if (isRunning) return
+    setIsRunning(true)
+    setPanelOpen(true)
+    clear("output")
+    appendLine("output", t("run.compiling"))
+    try {
+      const result = await runProject()
+      for (const diagnostic of result.diagnostics) {
+        const location = diagnostic.fileName ? `${diagnostic.fileName}(${diagnostic.line},${diagnostic.column}): ` : ""
+        appendLine("output", `${location}${diagnostic.severity}: ${diagnostic.message}`)
+      }
+      if (!result.success) {
+        appendLine("output", t("run.failed"))
+      } else {
+        for (const line of result.output.split("\n")) {
+          if (line.length > 0) appendLine("output", line)
+        }
+        if (result.exceptionMessage) appendLine("output", result.exceptionMessage)
+        appendLine("output", t("run.finished"))
+      }
+    } catch (error) {
+      appendLine("output", String(error))
+    } finally {
+      setIsRunning(false)
+    }
+  }, [isRunning, runProject, appendLine, clear, t])
 
   const sidebarPane = useResizablePane({
     axis: "horizontal",
@@ -113,7 +148,12 @@ export function Shell() {
 
   return (
     <div className={mergeClasses(styles.root, isResizing && styles.resizing)}>
-      <TitleBar onToggleSidebar={handleToggleSidebar} showSidebarToggle={isMobile} />
+      <TitleBar
+        onToggleSidebar={handleToggleSidebar}
+        showSidebarToggle={isMobile}
+        onRun={handleRun}
+        isRunning={isRunning}
+      />
       <div className={styles.main}>
         <div className={styles.workbench}>
           <ActivityBar active={activeView} onSelect={handleSelectView} />
