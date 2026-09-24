@@ -17,7 +17,6 @@ import {
 import type { TreeItemOpenChangeData, TreeItemOpenChangeEvent } from "@fluentui/react-components"
 import {
   FolderRegular,
-  FolderOpenRegular,
   DocumentRegular,
   MoreHorizontalRegular,
   AddRegular,
@@ -44,12 +43,6 @@ const useStyles = makeStyles({
     justifyContent: "flex-end",
     columnGap: tokens.spacingHorizontalXS,
     paddingBottom: tokens.spacingVerticalXS,
-  },
-  row: {
-    display: "flex",
-    alignItems: "center",
-    width: "100%",
-    columnGap: tokens.spacingHorizontalXS,
   },
   rowLabel: {
     flexGrow: 1,
@@ -287,11 +280,8 @@ function FileTreeNode({ node, editing, onSetEditing, onOpenFile, onDelete, commi
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
       >
-        <TreeItemLayout iconBefore={<DocumentRegular />}>
-          <div className={styles.row}>
-            <span className={styles.rowLabel}>{node.name}</span>
-            {menu}
-          </div>
+        <TreeItemLayout iconBefore={<DocumentRegular />} actions={menu}>
+          <span className={styles.rowLabel}>{node.name}</span>
         </TreeItemLayout>
       </TreeItem>
     )
@@ -305,11 +295,8 @@ function FileTreeNode({ node, editing, onSetEditing, onOpenFile, onDelete, commi
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <TreeItemLayout iconBefore={<FolderRegular />} expandIcon={<FolderOpenRegular />}>
-        <div className={styles.row}>
-          <span className={styles.rowLabel}>{node.name}</span>
-          {menu}
-        </div>
+      <TreeItemLayout iconBefore={<FolderRegular />} actions={menu}>
+        <span className={styles.rowLabel}>{node.name}</span>
       </TreeItemLayout>
       <Tree>
         {(node.children ?? []).map((child) => (
