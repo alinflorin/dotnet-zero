@@ -5,11 +5,21 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <OverrideHtmlAssetPlaceholders>true</OverrideHtmlAssetPlaceholders>
+    <CompressionEnabled>false</CompressionEnabled>
+    <EngineWebAssetsOutputPath>$(MSBuildProjectDirectory)\..\ui\public\engine\</EngineWebAssetsOutputPath>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.12" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.12" PrivateAssets="all" />
   </ItemGroup>
+
+  <Target Name="CopyEngineWebAssets" AfterTargets="Build">
+    <ItemGroup>
+      <EngineWebAssetFiles Include="$(OutDir)wwwroot\**" />
+    </ItemGroup>
+    <RemoveDir Directories="$(EngineWebAssetsOutputPath)" Condition="Exists('$(EngineWebAssetsOutputPath)')" />
+    <Copy SourceFiles="@(EngineWebAssetFiles)" DestinationFolder="$(EngineWebAssetsOutputPath)%(RecursiveDir)" SkipUnchangedFiles="true" />
+  </Target>
 
 </Project>
