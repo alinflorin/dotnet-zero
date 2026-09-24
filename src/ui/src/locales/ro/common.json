@@ -1,0 +1,20 @@
+{
+  "app.title": "Zero",
+  "activityBar.explorer": "Explorator",
+  "activityBar.search": "Căutare",
+  "activityBar.sourceControl": "Control sursă",
+  "activityBar.debug": "Rulare și depanare",
+  "activityBar.extensions": "Extensii",
+  "activityBar.settings": "Setări",
+  "sidebar.explorer.title": "Explorator",
+  "sidebar.noFolder": "Niciun folder deschis",
+  "sidebar.openFolder": "Deschide folder",
+  "editor.noFile": "Selectează un fișier pentru a începe editarea",
+  "statusBar.ready": "Pregătit",
+  "theme.light": "Luminos",
+  "theme.dark": "Întunecat",
+  "theme.auto": "Automat",
+  "theme.toggleLabel": "Temă culoare",
+  "language.toggleLabel": "Limbă",
+  "shell.toggleSidebar": "Comută bara laterală"
+}

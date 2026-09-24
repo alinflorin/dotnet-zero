@@ -1,9 +1,9 @@
 import { useEffect } from "react"
-import { useDotNet } from "./hooks/useDotNet"
+import { ThemeProvider } from "./app/theme/ThemeProvider"
+import { Shell } from "./components/shell/Shell"
+import "./app/i18n/i18n"
 
 function App() {
-  const { invoke } = useDotNet();
-
   useEffect(() => {
     (async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -11,16 +11,10 @@ function App() {
     })();
   }, []);
 
-  const handleClick = async () => {
-    const message = await invoke<string>("SayHello");
-    alert(message);
-  };
-
   return (
-    <>
-      apppppppppp
-      <button onClick={handleClick}>Say Hello</button>
-    </>
+    <ThemeProvider>
+      <Shell />
+    </ThemeProvider>
   )
 }
 

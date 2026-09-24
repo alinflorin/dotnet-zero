@@ -1,0 +1,20 @@
+{
+  "app.title": "Zero",
+  "activityBar.explorer": "Explorer",
+  "activityBar.search": "Search",
+  "activityBar.sourceControl": "Source Control",
+  "activityBar.debug": "Run and Debug",
+  "activityBar.extensions": "Extensions",
+  "activityBar.settings": "Settings",
+  "sidebar.explorer.title": "Explorer",
+  "sidebar.noFolder": "No folder opened",
+  "sidebar.openFolder": "Open Folder",
+  "editor.noFile": "Select a file to start editing",
+  "statusBar.ready": "Ready",
+  "theme.light": "Light",
+  "theme.dark": "Dark",
+  "theme.auto": "Auto",
+  "theme.toggleLabel": "Color theme",
+  "language.toggleLabel": "Language",
+  "shell.toggleSidebar": "Toggle sidebar"
+}
