@@ -1,31 +1,15 @@
 import * as monaco from "monaco-editor"
 import { loader } from "@monaco-editor/react"
 import EditorWorker from "monaco-editor/editor/editor.worker?worker"
-import JsonWorker from "monaco-editor/language/json/json.worker?worker"
-import CssWorker from "monaco-editor/language/css/css.worker?worker"
-import HtmlWorker from "monaco-editor/language/html/html.worker?worker"
-import TsWorker from "monaco-editor/language/typescript/ts.worker?worker"
 
+// This IDE only ever edits C# source, so the editor worker is the only one
+// registered — Monaco's JSON/CSS/HTML/TypeScript workers are never used.
 self.MonacoEnvironment = {
-  getWorker(_workerId: string, label: string) {
-    switch (label) {
-      case "json":
-        return new JsonWorker()
-      case "css":
-      case "scss":
-      case "less":
-        return new CssWorker()
-      case "html":
-      case "handlebars":
-      case "razor":
-        return new HtmlWorker()
-      case "typescript":
-      case "javascript":
-        return new TsWorker()
-      default:
-        return new EditorWorker()
-    }
+  getWorker() {
+    return new EditorWorker()
   },
 }
 
 loader.config({ monaco })
+
+export const CSHARP_LANGUAGE_ID = "csharp"

@@ -3,6 +3,7 @@ import Editor from "@monaco-editor/react"
 import { makeStyles, tokens, Text } from "@fluentui/react-components"
 import { useTranslation } from "react-i18next"
 import { useThemeMode } from "../../app/theme/theme-context"
+import { CSHARP_LANGUAGE_ID } from "../../app/monaco/setup"
 import { EditorTabs, type EditorFile } from "./EditorTabs"
 
 const useStyles = makeStyles({
@@ -30,14 +31,12 @@ const useStyles = makeStyles({
 
 const initialFiles: (EditorFile & { content: string })[] = [
   {
-    id: "welcome",
-    name: "welcome.tsx",
-    language: "typescript",
+    id: "program",
+    name: "Program.cs",
+    language: CSHARP_LANGUAGE_ID,
     content: [
       "// Welcome to Zero",
-      "export function Welcome() {",
-      "  return <h1>Hello, Zero!</h1>",
-      "}",
+      "Console.WriteLine(\"Hello, Zero!\");",
       "",
     ].join("\n"),
   },
@@ -76,6 +75,8 @@ export function EditorArea() {
               fontSize: 13,
               minimap: { enabled: true },
               automaticLayout: true,
+              tabSize: 4,
+              insertSpaces: true,
             }}
           />
         </div>

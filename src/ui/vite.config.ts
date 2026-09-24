@@ -41,9 +41,6 @@ export default defineConfig({
         // The Blazor WASM framework files are large and change per build;
         // keep them out of the precache and let the browser cache handle them.
         globIgnores: ['_framework/**/*'],
-        // Monaco's bundled language workers (e.g. the TypeScript worker) exceed
-        // the 2 MiB default; raise the limit so they still get precached.
-        maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
       },
     }),
   ],
