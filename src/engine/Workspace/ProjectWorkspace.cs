@@ -16,6 +16,14 @@ namespace engine.Workspace;
 public sealed class ProjectWorkspace
 {
     private const string DefaultProgramContent = "Console.WriteLine(\"Hello, World!\");\n";
+    private const string GlobalUsingsFileName = "GlobalUsings.g.cs";
+    private const string GlobalUsingsContent =
+        "global using System;\n" +
+        "global using System.Collections.Generic;\n" +
+        "global using System.IO;\n" +
+        "global using System.Linq;\n" +
+        "global using System.Threading;\n" +
+        "global using System.Threading.Tasks;\n";
 
     private AdhocWorkspace? _workspace;
     private ProjectId? _roslynProjectId;
@@ -24,6 +32,7 @@ public sealed class ProjectWorkspace
     private readonly Dictionary<string, DocumentId> _docIdByFileId = new(StringComparer.Ordinal);
     private readonly Dictionary<DocumentId, string> _fileIdByDocId = new();
     private readonly HashSet<string> _emptyFolders = new(StringComparer.Ordinal);
+    private readonly HashSet<DocumentId> _hiddenDocumentIds = new();
 
     public ProjectDto CreateProject(string name)
     {
@@ -33,6 +42,7 @@ public sealed class ProjectWorkspace
         _roslynProjectId = ProjectId.CreateNewId(name);
 
         _workspace!.AddProject(BuildProjectInfo(_roslynProjectId, name));
+        AddHiddenGlobalUsings();
         AddFileCore(Array.Empty<string>(), "Program.cs", DefaultProgramContent);
 
         return BuildProjectDto();
@@ -46,6 +56,7 @@ public sealed class ProjectWorkspace
         _roslynProjectId = ProjectId.CreateNewId(snapshot.Name);
 
         _workspace!.AddProject(BuildProjectInfo(_roslynProjectId, snapshot.Name));
+        AddHiddenGlobalUsings();
 
         foreach (var file in snapshot.Files)
             AddFileCore(file.Folders, file.Name, file.Content, file.Id);
@@ -62,6 +73,7 @@ public sealed class ProjectWorkspace
         var files = new List<ProjectFileSnapshot>();
         foreach (var document in CurrentProject().Documents)
         {
+            if (_hiddenDocumentIds.Contains(document.Id)) continue;
             var text = await document.GetTextAsync().ConfigureAwait(false);
             files.Add(new ProjectFileSnapshot(_fileIdByDocId[document.Id], document.Name, document.Folders.ToList(), text.ToString()));
         }
@@ -229,7 +241,21 @@ public sealed class ProjectWorkspace
         _docIdByFileId.Clear();
         _fileIdByDocId.Clear();
         _emptyFolders.Clear();
+        _hiddenDocumentIds.Clear();
         _roslynProjectId = null;
+    }
+
+    private void AddHiddenGlobalUsings()
+    {
+        var documentId = DocumentId.CreateNewId(_roslynProjectId!);
+        var documentInfo = DocumentInfo.Create(
+            documentId,
+            GlobalUsingsFileName,
+            sourceCodeKind: SourceCodeKind.Regular,
+            loader: TextLoader.From(TextAndVersion.Create(SourceText.From(GlobalUsingsContent), VersionStamp.Create())));
+
+        _workspace!.AddDocument(documentInfo);
+        _hiddenDocumentIds.Add(documentId);
     }
 
     private static ProjectInfo BuildProjectInfo(ProjectId projectId, string name) => ProjectInfo.Create(
@@ -318,8 +344,9 @@ public sealed class ProjectWorkspace
     private void EnsureUniqueName(IReadOnlyList<string> folders, string name, string? excludeFileId = null)
     {
         var project = CurrentProject();
+        var visibleDocuments = project.Documents.Where(d => !_hiddenDocumentIds.Contains(d.Id));
 
-        var fileConflict = project.Documents.Any(d =>
+        var fileConflict = visibleDocuments.Any(d =>
             d.Folders.Count == folders.Count &&
             StartsWithPath(d.Folders, folders) &&
             d.Name.Equals(name, StringComparison.OrdinalIgnoreCase) &&
@@ -330,7 +357,7 @@ public sealed class ProjectWorkspace
             var segments = SplitFolderPath(f);
             return segments.Length == folders.Count + 1 && StartsWithPath(segments, folders) &&
                    segments[^1].Equals(name, StringComparison.OrdinalIgnoreCase);
-        }) || project.Documents.Any(d =>
+        }) || visibleDocuments.Any(d =>
             d.Folders.Count > folders.Count &&
             StartsWithPath(d.Folders, folders) &&
             d.Folders[folders.Count].Equals(name, StringComparison.OrdinalIgnoreCase));
@@ -367,6 +394,7 @@ public sealed class ProjectWorkspace
 
         foreach (var document in CurrentProject().Documents)
         {
+            if (_hiddenDocumentIds.Contains(document.Id)) continue;
             var folder = EnsureFolderNode(document.Folders);
             folder.Children[document.Name] = new TreeNode { Id = _fileIdByDocId[document.Id], Name = document.Name, Kind = "file" };
         }
