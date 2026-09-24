@@ -1,6 +1,8 @@
 import { useEffect } from "react"
+import { useDotNet } from "./hooks/useDotNet"
 
 function App() {
+  const { invoke } = useDotNet();
 
   useEffect(() => {
     (async () => {
@@ -9,9 +11,15 @@ function App() {
     })();
   }, []);
 
+  const handleClick = async () => {
+    const message = await invoke<string>("SayHello");
+    alert(message);
+  };
+
   return (
     <>
       apppppppppp
+      <button onClick={handleClick}>Say Hello</button>
     </>
   )
 }
