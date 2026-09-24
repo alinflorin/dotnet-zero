@@ -10,7 +10,7 @@
     <WasmFingerprintAssets>false</WasmFingerprintAssets>
     <BlazorFingerprintBlazorJs>false</BlazorFingerprintBlazorJs>
     <WasmEnableHotReload>false</WasmEnableHotReload>
-    <EngineWebAssetsOutputPath>$(MSBuildProjectDirectory)\..\ui\public\</EngineWebAssetsOutputPath>
+    <EngineWebAssetsOutputPath>$(MSBuildProjectDirectory)\..\ui\public\engine\</EngineWebAssetsOutputPath>
   </PropertyGroup>
 
   <ItemGroup>
