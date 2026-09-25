@@ -19,3 +19,9 @@ public sealed record CompletionItemDto(string Label, string Kind, string InsertT
 public sealed record HoverDto(string MarkdownText, int StartLine, int StartColumn, int EndLine, int EndColumn);
 
 public sealed record LiveDiagnostic(string Severity, string Message, int StartLine, int StartColumn, int EndLine, int EndColumn);
+
+public sealed record SignatureParameterDto(int StartOffset, int EndOffset, string? Documentation);
+
+public sealed record SignatureItemDto(string Label, string? Documentation, IReadOnlyList<SignatureParameterDto> Parameters);
+
+public sealed record SignatureHelpDto(IReadOnlyList<SignatureItemDto> Signatures, int ActiveSignature, int ActiveParameter);

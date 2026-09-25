@@ -14,6 +14,10 @@ public static class LanguageApi
         ProjectApi.Workspace.GetHoverAsync(fileId, content, position);
 
     [JSInvokable]
+    public static Task<SignatureHelpDto?> GetSignatureHelp(string fileId, string content, int position, string? triggerCharacter, bool isRetrigger) =>
+        ProjectApi.Workspace.GetSignatureHelpAsync(fileId, content, position, triggerCharacter, isRetrigger);
+
+    [JSInvokable]
     public static Task<IReadOnlyList<LiveDiagnostic>> GetLiveDiagnostics(string fileId, string content) =>
         ProjectApi.Workspace.GetLiveDiagnosticsAsync(fileId, content);
 }

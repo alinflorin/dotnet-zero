@@ -1,13 +1,16 @@
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
+using System.Text;
 using System.Threading;
 using Basic.Reference.Assemblies;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Completion;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.QuickInfo;
 using Microsoft.CodeAnalysis.Text;
+using System.Xml.Linq;
 
 namespace engine.Workspace;
 
@@ -279,6 +282,146 @@ public sealed class ProjectWorkspace
                 return null;
             }
         }, cancellationToken);
+    }
+
+    // Roslyn's own SignatureHelpService/SignatureHelpItem types are internal to its feature assembly in
+    // this version, so overloads are resolved directly from the semantic model instead (the same technique
+    // OmniSharp uses): find the enclosing argument list, ask for its member group, and rank by best match.
+    public Task<SignatureHelpDto?> GetSignatureHelpAsync(string fileId, string content, int position, string? triggerCharacter, bool isRetrigger)
+    {
+        var cancellationToken = BeginRequest($"signature:{fileId}");
+        var document = TransientDocument(fileId, content);
+
+        return Task.Run<SignatureHelpDto?>(async () =>
+        {
+            try
+            {
+                var syntaxRoot = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
+                var semanticModel = await document.GetSemanticModelAsync(cancellationToken).ConfigureAwait(false);
+                if (syntaxRoot is null || semanticModel is null) return null;
+
+                var argumentList = FindEnclosingArgumentList(syntaxRoot, position);
+                if (argumentList?.Parent is not ExpressionSyntax invocationTarget) return null;
+
+                var memberGroupNode = invocationTarget is InvocationExpressionSyntax invocation ? invocation.Expression : invocationTarget;
+                var candidates = semanticModel.GetMemberGroup(memberGroupNode, cancellationToken).OfType<IMethodSymbol>().ToList();
+                if (candidates.Count == 0) return null;
+
+                var activeParameter = 0;
+                foreach (var comma in argumentList.Arguments.GetSeparators())
+                {
+                    if (comma.Span.Start < position) activeParameter++;
+                    else break;
+                }
+
+                var signatures = candidates.Select(method => BuildSignature(method, semanticModel, position)).ToList();
+
+                var symbolInfo = semanticModel.GetSymbolInfo(invocationTarget, cancellationToken);
+                var resolved = symbolInfo.Symbol as IMethodSymbol ?? symbolInfo.CandidateSymbols.OfType<IMethodSymbol>().FirstOrDefault();
+
+                var activeSignature = resolved is not null
+                    ? candidates.FindIndex(m => SymbolEqualityComparer.Default.Equals(m, resolved))
+                    : candidates.FindIndex(m => m.Parameters.Length > activeParameter || (m.Parameters.Length > 0 && m.Parameters[^1].IsParams));
+                if (activeSignature < 0) activeSignature = 0;
+
+                return new SignatureHelpDto(signatures, activeSignature, activeParameter);
+            }
+            catch (OperationCanceledException)
+            {
+                return null;
+            }
+        }, cancellationToken);
+    }
+
+    private static ArgumentListSyntax? FindEnclosingArgumentList(SyntaxNode root, int position)
+    {
+        var searchPosition = Math.Clamp(position, 0, root.FullSpan.End);
+        var tokenPosition = searchPosition > 0 ? searchPosition - 1 : 0;
+        var token = root.FindToken(tokenPosition);
+
+        foreach (var node in token.Parent?.AncestorsAndSelf() ?? Enumerable.Empty<SyntaxNode>())
+        {
+            if (node is not ArgumentListSyntax argumentList) continue;
+
+            var afterOpenParen = argumentList.OpenParenToken.Span.End <= searchPosition;
+            var beforeCloseParen = argumentList.CloseParenToken.IsMissing || searchPosition <= argumentList.CloseParenToken.Span.Start;
+            if (afterOpenParen && beforeCloseParen) return argumentList;
+        }
+
+        return null;
+    }
+
+    private static SignatureItemDto BuildSignature(IMethodSymbol method, SemanticModel semanticModel, int position)
+    {
+        var label = new StringBuilder();
+        if (method.MethodKind == MethodKind.Constructor)
+            label.Append(method.ContainingType.ToMinimalDisplayString(semanticModel, position));
+        else
+        {
+            label.Append(method.ReturnType.ToMinimalDisplayString(semanticModel, position));
+            label.Append(' ');
+            label.Append(method.Name);
+        }
+        label.Append('(');
+
+        var xml = method.GetDocumentationCommentXml();
+        var parameters = new List<SignatureParameterDto>();
+        for (var i = 0; i < method.Parameters.Length; i++)
+        {
+            if (i > 0) label.Append(", ");
+            var parameter = method.Parameters[i];
+
+            var start = label.Length;
+            if (parameter.IsParams) label.Append("params ");
+            label.Append(parameter.Type.ToMinimalDisplayString(semanticModel, position));
+            label.Append(' ');
+            label.Append(parameter.Name);
+            if (parameter.HasExplicitDefaultValue)
+                label.Append(" = ").Append(FormatDefaultValue(parameter));
+            var end = label.Length;
+
+            parameters.Add(new SignatureParameterDto(start, end, GetXmlDocParam(xml, parameter.Name)));
+        }
+
+        label.Append(')');
+        return new SignatureItemDto(label.ToString(), GetXmlDocSummary(xml), parameters);
+    }
+
+    private static string? FormatDefaultValue(IParameterSymbol parameter)
+    {
+        return parameter.ExplicitDefaultValue switch
+        {
+            null => parameter.Type.IsReferenceType || parameter.Type.TypeKind == TypeKind.TypeParameter ? "null" : "default",
+            string s => $"\"{s}\"",
+            bool b => b ? "true" : "false",
+            char c => $"'{c}'",
+            var v => v.ToString(),
+        };
+    }
+
+    private static string? GetXmlDocSummary(string? xml) => GetXmlDocElementText(xml, doc => doc.Root?.Element("summary"));
+
+    private static string? GetXmlDocParam(string? xml, string parameterName) =>
+        GetXmlDocElementText(xml, doc => doc.Root?.Elements("param").FirstOrDefault(e => (string?)e.Attribute("name") == parameterName));
+
+    private static string? GetXmlDocElementText(string? xml, Func<XDocument, XElement?> select)
+    {
+        if (string.IsNullOrWhiteSpace(xml)) return null;
+
+        try
+        {
+            var element = select(XDocument.Parse(xml));
+            if (element is null) return null;
+
+            var text = string.Join(
+                " ",
+                element.Value.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+            return string.IsNullOrWhiteSpace(text) ? null : text;
+        }
+        catch (System.Xml.XmlException)
+        {
+            return null;
+        }
     }
 
     public Task<IReadOnlyList<LiveDiagnostic>> GetLiveDiagnosticsAsync(string fileId, string content)

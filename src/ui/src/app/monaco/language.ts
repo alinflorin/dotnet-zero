@@ -21,6 +21,24 @@ interface HoverDto {
   endColumn: number
 }
 
+interface SignatureParameterDto {
+  startOffset: number
+  endOffset: number
+  documentation: string | null
+}
+
+interface SignatureItemDto {
+  label: string
+  documentation: string | null
+  parameters: SignatureParameterDto[]
+}
+
+interface SignatureHelpDto {
+  signatures: SignatureItemDto[]
+  activeSignature: number
+  activeParameter: number
+}
+
 interface LiveDiagnosticDto {
   severity: string
   message: string
@@ -128,6 +146,44 @@ export function registerCSharpLanguageFeatures() {
         return {
           contents: [{ value: hover.markdownText }],
           range: new monaco.Range(hover.startLine, hover.startColumn, hover.endLine, hover.endColumn),
+        }
+      } catch {
+        return null
+      }
+    },
+  })
+
+  monaco.languages.registerSignatureHelpProvider(CSHARP_LANGUAGE_ID, {
+    signatureHelpTriggerCharacters: ["(", ","],
+    signatureHelpRetriggerCharacters: [")"],
+    async provideSignatureHelp(model, position, _token, context) {
+      await ensureBlazorReady()
+
+      try {
+        const help = await invokeDotNet<SignatureHelpDto | null>(
+          "GetSignatureHelp",
+          fileIdOf(model),
+          model.getValue(),
+          model.getOffsetAt(position),
+          context.triggerCharacter ?? null,
+          context.isRetrigger,
+        )
+        if (!help || help.signatures.length === 0) return null
+
+        return {
+          value: {
+            signatures: help.signatures.map((signature) => ({
+              label: signature.label,
+              documentation: signature.documentation ? { value: signature.documentation } : undefined,
+              parameters: signature.parameters.map((parameter) => ({
+                label: [parameter.startOffset, parameter.endOffset] as [number, number],
+                documentation: parameter.documentation ? { value: parameter.documentation } : undefined,
+              })),
+            })),
+            activeSignature: help.activeSignature,
+            activeParameter: help.activeParameter,
+          },
+          dispose: () => {},
         }
       } catch {
         return null
