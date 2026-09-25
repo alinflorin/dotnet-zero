@@ -39,7 +39,6 @@ const useStyles = makeStyles({
   actionButton: {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ["-webkit-app-region" as any]: "no-drag",
-    color: tokens.colorPaletteGreenForeground1,
   },
   cleanButton: {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

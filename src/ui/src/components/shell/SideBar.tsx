@@ -13,6 +13,7 @@ import { useThemeMode, type ThemeMode } from "../../app/theme/theme-context"
 import { ExplorerPanel } from "../explorer/ExplorerPanel"
 import { DebugSidebar } from "../debug/DebugSidebar"
 import { NuGetPanel } from "../nuget/NuGetPanel"
+import { SearchPanel } from "../search/SearchPanel"
 
 const useStyles = makeStyles({
   root: {
@@ -79,7 +80,6 @@ const useStyles = makeStyles({
 const titleKeyByView: Partial<Record<ActivityView, string>> = {
   explorer: "sidebar.explorer.title",
   search: "activityBar.search",
-  sourceControl: "activityBar.sourceControl",
   debug: "activityBar.debug",
   extensions: "activityBar.nuget",
   settings: "activityBar.settings",
@@ -142,10 +142,16 @@ export function SideBar({ view, width, onResizeStart, resizing }: SideBarProps) 
       <div
         className={mergeClasses(
           styles.body,
-          (view === "settings" || view === "explorer" || view === "debug" || view === "extensions") && styles.stretchBody,
+          (view === "settings" ||
+            view === "explorer" ||
+            view === "search" ||
+            view === "debug" ||
+            view === "extensions") &&
+            styles.stretchBody,
         )}
       >
         {view === "explorer" && <ExplorerPanel />}
+        {view === "search" && <SearchPanel />}
         {view === "debug" && <DebugSidebar />}
         {view === "extensions" && <NuGetPanel />}
         {view === "settings" && <SettingsPanel />}

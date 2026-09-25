@@ -4,8 +4,6 @@ import {
   FolderFilled,
   SearchRegular,
   SearchFilled,
-  BranchRegular,
-  BranchFilled,
   BugRegular,
   BugFilled,
   BoxRegular,
@@ -19,12 +17,11 @@ import { useTranslation } from "react-i18next"
 
 const Folder = bundleIcon(FolderFilled, FolderRegular)
 const Search = bundleIcon(SearchFilled, SearchRegular)
-const Branch = bundleIcon(BranchFilled, BranchRegular)
 const Bug = bundleIcon(BugFilled, BugRegular)
 const Box = bundleIcon(BoxFilled, BoxRegular)
 const Settings = bundleIcon(SettingsFilled, SettingsRegular)
 
-export type ActivityView = "explorer" | "search" | "sourceControl" | "debug" | "extensions" | "settings"
+export type ActivityView = "explorer" | "search" | "debug" | "extensions" | "settings"
 
 interface ActivityItem {
   id: ActivityView
@@ -35,7 +32,6 @@ interface ActivityItem {
 const items: ActivityItem[] = [
   { id: "explorer", icon: Folder, labelKey: "activityBar.explorer" },
   { id: "search", icon: Search, labelKey: "activityBar.search" },
-  { id: "sourceControl", icon: Branch, labelKey: "activityBar.sourceControl" },
   { id: "debug", icon: Bug, labelKey: "activityBar.debug" },
   { id: "extensions", icon: Box, labelKey: "activityBar.nuget" },
 ]

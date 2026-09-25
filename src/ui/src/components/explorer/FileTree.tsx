@@ -131,7 +131,12 @@ export function FileTree({ files, onOpenFile, onAddFile, onAddFolder, onRename, 
           onClick={() => setEditing({ mode: "create-folder", parentPath: undefined })}
         />
       </div>
-      <Tree aria-label={t("sidebar.explorer.title")} openItems={openItems} onOpenChange={handleOpenChange}>
+      <Tree
+        size="small"
+        aria-label={t("sidebar.explorer.title")}
+        openItems={openItems}
+        onOpenChange={handleOpenChange}
+      >
         {files.map((node) => (
           <FileTreeNode
             key={node.id}

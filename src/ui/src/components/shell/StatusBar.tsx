@@ -30,6 +30,10 @@ const useStyles = makeStyles({
     width: "20px",
     height: "20px",
     color: tokens.colorNeutralForegroundOnBrand,
+    ":hover": {
+      backgroundColor: "rgba(255, 255, 255, 0.2)",
+      color: tokens.colorNeutralForegroundOnBrand,
+    },
   },
   panelToggleActive: {
     backgroundColor: tokens.colorNeutralForegroundOnBrand,
