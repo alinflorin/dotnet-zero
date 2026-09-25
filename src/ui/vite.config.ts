@@ -152,6 +152,14 @@ export default defineConfig({
       workbox: {
         // The Monaco workers and app bundle legitimately exceed the 2 MiB default.
         maximumFileSizeToCacheInBytes: 1000 * 1024 * 1024,
+        // vite-plugin-pwa's default globPatterns only covers
+        // js/css/html/ico/png/svg/webp, which misses the Blazor WASM
+        // engine's own asset types (mjs workers, .dat ICU/timezone data,
+        // .pdb symbols, .dll/.blat assemblies) and plenty of ordinary web
+        // asset types (fonts, extra image/cursor formats, etc). Rather than
+        // maintain an extension allowlist that's always one type behind,
+        // precache everything under dist so the app can run fully offline.
+        globPatterns: ['**/*'],
       },
     }),
   ],

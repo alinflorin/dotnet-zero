@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "cert": "mkdir -p .certs && CAROOT=\"$(command /usr/local/bin/mkcert -CAROOT 2>/dev/null || command mkcert -CAROOT)\" && mkcert create-cert --ca-cert \"$CAROOT/rootCA.pem\" --ca-key \"$CAROOT/rootCA-key.pem\" --cert .certs/localhost.pem --key .certs/localhost-key.pem --domains localhost 127.0.0.1 ::1",
+    "cert": "mkdir -p .certs && ([ -f .certs/ca.crt ] || mkcert create-ca --cert .certs/ca.crt --key .certs/ca.key) && mkcert create-cert --ca-cert .certs/ca.crt --ca-key .certs/ca.key --cert .certs/localhost.pem --key .certs/localhost-key.pem --domains localhost 127.0.0.1 ::1 && security add-trusted-cert -k ~/Library/Keychains/login.keychain-db .certs/ca.crt",
     "serve:https": "serve dist --ssl-cert .certs/localhost.pem --ssl-key .certs/localhost-key.pem -l 8443"
   },
   "dependencies": {
