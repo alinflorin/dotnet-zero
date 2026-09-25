@@ -115,6 +115,7 @@ export function Shell() {
         appendLine("output", `${location}${diagnostic.severity}: ${diagnostic.message}`)
       }
       if (!result.success) {
+        if (result.exceptionMessage) appendLine("output", result.exceptionMessage)
         appendLine("output", t("run.failed"))
       } else {
         for (const line of result.output.split("\n")) {

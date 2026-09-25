@@ -177,6 +177,17 @@ public sealed class SolutionWorkspace
 
     public async Task<CompileResult> CompileAsync(string projectId)
     {
+        var (success, diagnostics, _) = await CompileGraphAsync(projectId).ConfigureAwait(false);
+        return new CompileResult(success, diagnostics);
+    }
+
+    /// <summary>Compiles <paramref name="projectId"/> and every project it (transitively) depends on,
+    /// dependencies first, wiring each one's compiled bytes into its dependents as it goes. Returns every
+    /// compiled assembly's bytes (not just the target's) so a caller running the target can also load its
+    /// dependencies into the runtime — <see cref="ProjectWorkspace.SetProjectReferenceAssemblies"/> only
+    /// feeds the compiler, execution needs the actual assemblies loaded too.</summary>
+    private async Task<(bool Success, IReadOnlyList<CompileDiagnostic> Diagnostics, Dictionary<string, byte[]>? CompiledBytes)> CompileGraphAsync(string projectId)
+    {
         List<string> order;
         try
         {
@@ -184,7 +195,7 @@ public sealed class SolutionWorkspace
         }
         catch (InvalidOperationException ex)
         {
-            return new CompileResult(false, [new CompileDiagnostic("error", ex.Message, null, null, 0, 0)]);
+            return (false, [new CompileDiagnostic("error", ex.Message, null, null, 0, 0)], null);
         }
 
         var compiledBytes = new Dictionary<string, byte[]>(StringComparer.Ordinal);
@@ -206,24 +217,25 @@ public sealed class SolutionWorkspace
             if (!success)
             {
                 project.SetLastCompiledAssembly(null);
-                return new CompileResult(false, allDiagnostics);
+                return (false, allDiagnostics, null);
             }
 
             project.SetLastCompiledAssembly(bytes);
             compiledBytes[id] = bytes!;
         }
 
-        return new CompileResult(true, allDiagnostics);
+        return (true, allDiagnostics, compiledBytes);
     }
 
     public async Task<RunResult> RunAsync(string? projectId)
     {
         var targetId = projectId ?? _startupProjectId ?? throw new InvalidOperationException("No startup project is set.");
-        var compileResult = await CompileAsync(targetId).ConfigureAwait(false);
-        if (!compileResult.Success)
-            return new RunResult(false, compileResult.Diagnostics, "", null);
+        var (success, diagnostics, compiledBytes) = await CompileGraphAsync(targetId).ConfigureAwait(false);
+        if (!success || compiledBytes is null)
+            return new RunResult(false, diagnostics, "", null);
 
-        return await Project(targetId).RunAsync().ConfigureAwait(false);
+        var dependencyBytes = compiledBytes.Where(kv => kv.Key != targetId).Select(kv => kv.Value).ToList();
+        return await Project(targetId).RunAsync(dependencyBytes).ConfigureAwait(false);
     }
 
     public Task<RunResult> CompileAndRunAsync(string? projectId) => RunAsync(projectId);

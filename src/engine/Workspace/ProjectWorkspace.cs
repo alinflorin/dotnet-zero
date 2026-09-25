@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
+using System.Runtime.Loader;
 using System.Text;
 using System.Threading;
 using Basic.Reference.Assemblies;
@@ -374,15 +375,19 @@ public sealed class ProjectWorkspace
         _lastCompiledAssembly = null;
     }
 
-    public async Task<RunResult> RunAsync()
+    /// <summary>Runs this project, loading <paramref name="dependencyAssemblies"/> (the compiled bytes of
+    /// every project this one references, transitively) into the same isolated load context first so the
+    /// runtime can resolve types from them — <see cref="MetadataReference.CreateFromImage"/> only satisfies
+    /// the compiler, not execution.</summary>
+    public async Task<RunResult> RunAsync(IReadOnlyList<byte[]> dependencyAssemblies)
     {
         if (_lastCompiledAssembly is { } cached)
-            return await ExecuteAsync(cached, []).ConfigureAwait(false);
+            return await ExecuteAsync(cached, dependencyAssemblies, []).ConfigureAwait(false);
 
-        return await CompileAndRunAsync().ConfigureAwait(false);
+        return await CompileAndRunAsync(dependencyAssemblies).ConfigureAwait(false);
     }
 
-    public async Task<RunResult> CompileAndRunAsync()
+    public async Task<RunResult> CompileAndRunAsync(IReadOnlyList<byte[]> dependencyAssemblies)
     {
         var (success, diagnostics, assemblyBytes) = await EmitAsync().ConfigureAwait(false);
         _lastCompiledAssembly = success ? assemblyBytes : null;
@@ -390,7 +395,7 @@ public sealed class ProjectWorkspace
         if (!success)
             return new RunResult(false, diagnostics, "", null);
 
-        return await ExecuteAsync(assemblyBytes!, diagnostics).ConfigureAwait(false);
+        return await ExecuteAsync(assemblyBytes!, dependencyAssemblies, diagnostics).ConfigureAwait(false);
     }
 
     public Task<IReadOnlyList<CompletionItemDto>> GetCompletionsAsync(string fileId, string content, int position, string? triggerCharacter)
@@ -663,9 +668,22 @@ public sealed class ProjectWorkspace
         return (emitResult.Success, diagnostics, emitResult.Success ? peStream.ToArray() : null);
     }
 
-    private static async Task<RunResult> ExecuteAsync(byte[] assemblyBytes, IReadOnlyList<CompileDiagnostic> diagnostics)
+    private static async Task<RunResult> ExecuteAsync(
+        byte[] assemblyBytes, IReadOnlyList<byte[]> dependencyAssemblies, IReadOnlyList<CompileDiagnostic> diagnostics)
     {
-        var assembly = Assembly.Load(assemblyBytes);
+        // A fresh, isolated context per run: MetadataReference.CreateFromImage satisfies the compiler,
+        // but the runtime still needs the referenced projects' actual assemblies loaded to resolve types
+        // at execution time. A dedicated context (rather than the default one) also lets repeated runs
+        // reload same-named project assemblies without identity clashes across the page's lifetime.
+        var context = new AssemblyLoadContext($"zero-run-{Guid.NewGuid():n}");
+        foreach (var dependencyBytes in dependencyAssemblies)
+        {
+            using var dependencyStream = new MemoryStream(dependencyBytes);
+            context.LoadFromStream(dependencyStream);
+        }
+
+        using var assemblyStream = new MemoryStream(assemblyBytes);
+        var assembly = context.LoadFromStream(assemblyStream);
         var entryPoint = assembly.EntryPoint;
         if (entryPoint is null)
             return new RunResult(false, diagnostics, "", "No entry point (Main method) found.");

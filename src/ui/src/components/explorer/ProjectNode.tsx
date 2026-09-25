@@ -150,6 +150,7 @@ export const ProjectNode = memo(function ProjectNode({ project: p }: ProjectNode
       appendLine("output", `${location}${diagnostic.severity}: ${diagnostic.message}`)
     }
     if (!result.success) {
+      if (result.exceptionMessage) appendLine("output", result.exceptionMessage)
       appendLine("output", t("run.failed"))
     } else {
       for (const line of result.output.split("\n")) if (line.length > 0) appendLine("output", line)
