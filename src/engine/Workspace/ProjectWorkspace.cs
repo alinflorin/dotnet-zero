@@ -142,10 +142,14 @@ public sealed class ProjectWorkspace
         return _packageManager.Installed;
     }
 
+    /// <summary>Base .NET reference assemblies plus every installed NuGet package's assemblies — used both for
+    /// this workspace's own compilation and by <see cref="DebugWorkspace"/>'s separate debug-instrumented one.</summary>
+    public IReadOnlyList<MetadataReference> GetMetadataReferences() =>
+        BaseMetadataReferences.Concat(_packageManager.References).ToImmutableArray();
+
     private void ApplyPackageReferences()
     {
-        var combined = BaseMetadataReferences.Concat(_packageManager.References).ToImmutableArray();
-        var solution = _workspace!.CurrentSolution.WithProjectMetadataReferences(_roslynProjectId!, combined);
+        var solution = _workspace!.CurrentSolution.WithProjectMetadataReferences(_roslynProjectId!, GetMetadataReferences());
         _workspace.TryApplyChanges(solution);
         _lastCompiledAssembly = null;
     }

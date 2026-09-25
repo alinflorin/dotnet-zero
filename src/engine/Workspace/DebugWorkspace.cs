@@ -1,6 +1,5 @@
 using System.Reflection;
 using System.Text.Json;
-using Basic.Reference.Assemblies;
 using engine.Debugging;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -75,7 +74,7 @@ public sealed class DebugWorkspace(ProjectWorkspace project)
             LanguageNames.CSharp,
             compilationOptions: new CSharpCompilationOptions(OutputKind.ConsoleApplication, nullableContextOptions: NullableContextOptions.Enable),
             parseOptions: new CSharpParseOptions(LanguageVersion.Latest),
-            metadataReferences: Net100.References.All);
+            metadataReferences: project.GetMetadataReferences());
         adhoc.AddProject(projectInfo);
 
         adhoc.AddDocument(DocumentInfo.Create(

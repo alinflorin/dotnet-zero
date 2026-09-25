@@ -1,5 +1,7 @@
 using System.IO.Compression;
 using System.Net.Http.Json;
+using System.Reflection;
+using System.Runtime.Loader;
 using System.Text.Json.Serialization;
 using System.Xml.Linq;
 using Microsoft.CodeAnalysis;
@@ -22,6 +24,21 @@ public sealed class NuGetPackageManager
         "net10.0", "net9.0", "net8.0", "net7.0", "net6.0", "net5.0",
         "netstandard2.1", "netstandard2.0", "netstandard1.6", "netstandard1.3", "netstandard1.0",
     ];
+
+    // Assemblies loaded via Assembly.Load(byte[]) land in the default AssemblyLoadContext but
+    // aren't picked up by its normal probing (that only looks at the app's deps.json/TPA list),
+    // so a compiled program's reference to e.g. Newtonsoft.Json throws FileNotFoundException at
+    // invoke time despite the assembly already being loaded. Resolving is the documented hook for
+    // satisfying such in-memory-loaded dependencies by name; registered once per process since the
+    // ALC itself is a process-wide singleton, and reused by both ProjectWorkspace's Run/Compile and
+    // DebugWorkspace's debug-session execution.
+    private static readonly Dictionary<string, Assembly> RuntimeLoadedByName = new(StringComparer.OrdinalIgnoreCase);
+
+    static NuGetPackageManager()
+    {
+        AssemblyLoadContext.Default.Resolving += (_, name) =>
+            name.Name is { } simpleName && RuntimeLoadedByName.TryGetValue(simpleName, out var assembly) ? assembly : null;
+    }
 
     private readonly HttpClient _httpClient = new();
     private readonly Dictionary<string, InstalledPackage> _installed = new(StringComparer.OrdinalIgnoreCase);
@@ -106,8 +123,18 @@ public sealed class NuGetPackageManager
         var nupkgBytes = await DownloadPackageAsync(id, version).ConfigureAwait(false);
         using var archive = new ZipArchive(new MemoryStream(nupkgBytes), ZipArchiveMode.Read);
 
-        var (assemblyNames, references) = ExtractAssemblies(archive);
+        var (assemblyNames, assemblyImages) = ExtractAssemblies(archive);
         var dependencies = ExtractDependencies(archive);
+
+        // Assemblies are needed twice: as MetadataReferences for Roslyn's compile-time symbol
+        // resolution, and loaded into this process for the reflection-based Run/Emit step to
+        // actually find the types at execution time — CreateFromImage alone only covers the former.
+        var references = new List<MetadataReference>(assemblyImages.Count);
+        foreach (var image in assemblyImages)
+        {
+            references.Add(MetadataReference.CreateFromImage(image));
+            TryLoadRuntimeAssembly(image);
+        }
 
         var package = new InstalledPackage(id, version, assemblyNames, references) { IsDirect = isDirect };
         if (dependent is not null) package.RequiredBy.Add(dependent);
@@ -166,7 +193,22 @@ public sealed class NuGetPackageManager
         return await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
     }
 
-    private static (List<string> AssemblyNames, List<MetadataReference> References) ExtractAssemblies(ZipArchive archive)
+    private static void TryLoadRuntimeAssembly(byte[] image)
+    {
+        try
+        {
+            var assembly = Assembly.Load(image);
+            if (assembly.GetName().Name is { } name)
+                RuntimeLoadedByName[name] = assembly;
+        }
+        catch (Exception)
+        {
+            // Either already loaded (e.g. re-installed with identical identity) or unsupported by
+            // the host runtime — the MetadataReference still lets code compile against it either way.
+        }
+    }
+
+    private static (List<string> AssemblyNames, List<byte[]> AssemblyImages) ExtractAssemblies(ZipArchive archive)
     {
         var libEntries = archive.Entries
             .Where(e => e.FullName.StartsWith("lib/", StringComparison.OrdinalIgnoreCase) && e.FullName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
@@ -194,25 +236,29 @@ public sealed class NuGetPackageManager
         if (chosen is null || chosen.Count == 0) return ([], []);
 
         var names = new List<string>();
-        var references = new List<MetadataReference>();
+        var images = new List<byte[]>();
         foreach (var entry in chosen)
         {
             using var entryStream = entry.Open();
             using var buffer = new MemoryStream();
             entryStream.CopyTo(buffer);
+            var image = buffer.ToArray();
 
             try
             {
-                references.Add(MetadataReference.CreateFromImage(buffer.ToArray()));
+                // Validate it's a real managed assembly before keeping it — CreateFromImage throws
+                // BadImageFormatException for a native/resource file shipped under lib/, and we'd
+                // rather skip those here than fail installation of the whole package.
+                _ = MetadataReference.CreateFromImage(image);
+                images.Add(image);
                 names.Add(Path.GetFileNameWithoutExtension(entry.Name));
             }
             catch (BadImageFormatException)
             {
-                // Not a managed assembly (e.g. a native/resource file shipped under lib/) — skip it.
             }
         }
 
-        return (names, references);
+        return (names, images);
     }
 
     private static List<(string Id, string? VersionRange)> ExtractDependencies(ZipArchive archive)
