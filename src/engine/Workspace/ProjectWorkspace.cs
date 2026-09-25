@@ -683,8 +683,11 @@ public sealed class ProjectWorkspace
 
     /// <summary>Hand-rolled "add using" quick fix — Roslyn's own <c>CSharpAddImportCodeFixProvider</c> is
     /// internal and only reachable through MEF/<c>ICodeFixService</c> host composition this workspace
-    /// doesn't have, so this resolves candidates directly via <see cref="Compilation.GetSymbolsWithName"/>
-    /// (the same "go straight to the public compiler API" approach <see cref="GetSignatureHelpAsync"/> uses).</summary>
+    /// doesn't have, so this resolves candidates directly via public compiler APIs (the same
+    /// "go straight to the public compiler API" approach <see cref="GetSignatureHelpAsync"/> uses).
+    /// <see cref="Compilation.GetSymbolsWithName"/> only searches the compilation's own source, not
+    /// referenced assemblies — exactly where an installed NuGet package's types live — so those are
+    /// searched separately via <see cref="FindTypesByName"/>.</summary>
     public Task<IReadOnlyList<CodeActionDto>> GetCodeActionsAsync(string fileId, string content, int startOffset, int endOffset)
     {
         var cancellationToken = BeginRequest($"codeactions:{fileId}");
@@ -722,7 +725,18 @@ public sealed class ProjectWorkspace
                     .Where(n => n is not null)
                     .ToHashSet(StringComparer.Ordinal) ?? [];
 
-                var candidateNamespaces = compilation.GetSymbolsWithName(name => name == identifier, SymbolFilter.Type, cancellationToken)
+                var sourceTypes = compilation.GetSymbolsWithName(name => name == identifier, SymbolFilter.Type, cancellationToken);
+
+                var referencedTypes = compilation.References
+                    .Select(compilation.GetAssemblyOrModuleSymbol)
+                    .OfType<IAssemblySymbol>()
+                    // TypeNames is a cheap metadata-backed lookup — only assemblies that actually
+                    // declare a type with this name are worth the namespace-tree walk below.
+                    .Where(assembly => assembly.TypeNames.Contains(identifier))
+                    .SelectMany(assembly => FindTypesByName(assembly.GlobalNamespace, identifier, cancellationToken));
+
+                var candidateNamespaces = sourceTypes.Concat(referencedTypes)
+                    .Where(symbol => symbol.DeclaredAccessibility == Accessibility.Public)
                     .Select(symbol => symbol.ContainingNamespace)
                     .Where(ns => ns is { IsGlobalNamespace: false })
                     .Select(ns => ns!.ToDisplayString())
@@ -748,6 +762,20 @@ public sealed class ProjectWorkspace
                 return [];
             }
         }, cancellationToken);
+    }
+
+    /// <summary>Recursively walks a namespace tree (an assembly's <see cref="IAssemblySymbol.GlobalNamespace"/>)
+    /// for type members with the given name. Only called for assemblies whose (cheap, metadata-backed)
+    /// <see cref="IAssemblySymbol.TypeNames"/> already confirms the name exists somewhere in them.</summary>
+    private static IEnumerable<INamedTypeSymbol> FindTypesByName(INamespaceSymbol ns, string name, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        foreach (var type in ns.GetTypeMembers(name))
+            yield return type;
+
+        foreach (var child in ns.GetNamespaceMembers())
+            foreach (var type in FindTypesByName(child, name, cancellationToken))
+                yield return type;
     }
 
     /// <summary>
