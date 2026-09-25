@@ -287,7 +287,6 @@ export function registerCSharpLanguageFeatures() {
             startOffset,
             endOffset,
           )
-          console.debug("[csharp] GetCodeActions", { startOffset, endOffset, markers: context.markers, codeActions })
 
           return {
             actions: codeActions.map((action) => ({
@@ -307,8 +306,7 @@ export function registerCSharpLanguageFeatures() {
             })),
             dispose: () => {},
           }
-        } catch (err) {
-          console.error("[csharp] GetCodeActions failed", err)
+        } catch {
           return { actions: [], dispose: () => {} }
         }
       },
