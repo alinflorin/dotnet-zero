@@ -11,6 +11,7 @@ import { useTranslation } from "react-i18next"
 import type { ActivityView } from "./ActivityBar"
 import { useThemeMode, type ThemeMode } from "../../app/theme/theme-context"
 import { ExplorerPanel } from "../explorer/ExplorerPanel"
+import { DebugSidebar } from "../debug/DebugSidebar"
 
 const useStyles = makeStyles({
   root: {
@@ -137,8 +138,9 @@ export function SideBar({ view, width, onResizeStart, resizing }: SideBarProps) 
       <div className={styles.header}>
         <Text className={styles.headerText}>{t(titleKeyByView[view] ?? "sidebar.explorer.title")}</Text>
       </div>
-      <div className={mergeClasses(styles.body, (view === "settings" || view === "explorer") && styles.stretchBody)}>
+      <div className={mergeClasses(styles.body, (view === "settings" || view === "explorer" || view === "debug") && styles.stretchBody)}>
         {view === "explorer" && <ExplorerPanel />}
+        {view === "debug" && <DebugSidebar />}
         {view === "settings" && <SettingsPanel />}
       </div>
       {onResizeStart && (

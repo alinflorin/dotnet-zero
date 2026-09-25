@@ -10,6 +10,7 @@ import { Panel } from "../panel/Panel"
 import { useResizablePane } from "../../hooks/useResizablePane"
 import { useProject } from "../../app/project/project-context"
 import { useLog } from "../../app/panel/log-context"
+import { useDebug } from "../../app/debug/debug-context"
 import type { RunResult } from "../../app/project/types"
 
 const MOBILE_QUERY = "(max-width: 768px)"
@@ -80,6 +81,7 @@ export function Shell() {
   const { t } = useTranslation()
   const { compileProject, runProject, compileAndRunProject, cleanProject } = useProject()
   const { appendLine, clear } = useLog()
+  const { startDebug } = useDebug()
   const [activeView, setActiveView] = useState<ActivityView>("explorer")
   const isMobile = useIsMobile()
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -155,6 +157,18 @@ export function Shell() {
     }
   }, [isBusy, compileAndRunProject, reportRunResult, appendLine, clear, t])
 
+  const handleDebug = useCallback(async () => {
+    if (isBusy) return
+    setActiveView("debug")
+    setPanelOpen(true)
+    clear("debug")
+    try {
+      await startDebug()
+    } catch (error) {
+      appendLine("debug", String(error))
+    }
+  }, [isBusy, startDebug, appendLine, clear])
+
   const handleClean = useCallback(async () => {
     if (isBusy) return
     await cleanProject()
@@ -203,6 +217,7 @@ export function Shell() {
         onCompile={handleCompile}
         onRun={handleRun}
         onCompileAndRun={handleCompileAndRun}
+        onDebug={handleDebug}
         onClean={handleClean}
         isBusy={isBusy}
       />

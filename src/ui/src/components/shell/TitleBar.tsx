@@ -9,6 +9,8 @@ import {
   PlaySettingsFilled,
   BroomRegular,
   BroomFilled,
+  BugRegular,
+  BugFilled,
   bundleIcon,
 } from "@fluentui/react-icons"
 import { useTranslation } from "react-i18next"
@@ -17,6 +19,7 @@ const Wrench = bundleIcon(WrenchFilled, WrenchRegular)
 const Play = bundleIcon(PlayFilled, PlayRegular)
 const PlaySettings = bundleIcon(PlaySettingsFilled, PlaySettingsRegular)
 const Broom = bundleIcon(BroomFilled, BroomRegular)
+const Bug = bundleIcon(BugFilled, BugRegular)
 
 const useStyles = makeStyles({
   root: {
@@ -60,6 +63,7 @@ interface TitleBarProps {
   onCompile?: () => void
   onRun?: () => void
   onCompileAndRun?: () => void
+  onDebug?: () => void
   onClean?: () => void
   isBusy?: boolean
 }
@@ -70,6 +74,7 @@ export function TitleBar({
   onCompile,
   onRun,
   onCompileAndRun,
+  onDebug,
   onClean,
   isBusy,
 }: TitleBarProps) {
@@ -126,6 +131,18 @@ export function TitleBar({
           disabled={isBusy}
           aria-label={t("run.compileAndRun")}
           title={t("run.compileAndRun")}
+        />
+      )}
+      {onDebug && (
+        <Button
+          appearance="subtle"
+          size="small"
+          className={styles.actionButton}
+          icon={<Bug />}
+          onClick={onDebug}
+          disabled={isBusy}
+          aria-label={t("run.debug")}
+          title={t("run.debug")}
         />
       )}
       {onClean && (

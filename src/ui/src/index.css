@@ -9,3 +9,16 @@ body,
 * {
   box-sizing: border-box;
 }
+
+.zero-breakpoint-glyph {
+  background: #e51400;
+  border-radius: 50%;
+  width: 8px !important;
+  height: 8px !important;
+  margin-left: 5px;
+  margin-top: 6px;
+}
+
+.zero-debug-current-line {
+  background-color: rgba(255, 208, 0, 0.15);
+}

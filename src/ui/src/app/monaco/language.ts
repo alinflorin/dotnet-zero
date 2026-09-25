@@ -1,6 +1,7 @@
 import * as monaco from "monaco-editor"
 import { invokeDotNet } from "../../hooks/useDotNet"
 import { ensureBlazorReady } from "../blazor/blazorReady"
+import { fileIdOf } from "./fileId"
 
 export const CSHARP_LANGUAGE_ID = "csharp"
 
@@ -85,12 +86,6 @@ function toMarkerSeverity(severity: string): monaco.MarkerSeverity {
     default:
       return monaco.MarkerSeverity.Hint
   }
-}
-
-// The project workspace on the backend is keyed by file id, and @monaco-editor/react
-// builds each model's URI from the `path` prop, which EditorArea sets to the file id.
-function fileIdOf(model: monaco.editor.ITextModel): string {
-  return model.uri.path.replace(/^\//, "")
 }
 
 let registered = false
