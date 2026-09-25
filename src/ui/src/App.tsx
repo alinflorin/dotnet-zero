@@ -11,7 +11,6 @@ import "./app/i18n/i18n"
 function App() {
   useEffect(() => {
     void ensureBlazorReady()
-    console.log('test');
   }, []);
 
   return (
