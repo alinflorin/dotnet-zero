@@ -1,8 +1,22 @@
 import { makeStyles, tokens, Text, Button, Spinner } from "@fluentui/react-components"
-import { NavigationRegular, PlayRegular, PlayFilled, bundleIcon } from "@fluentui/react-icons"
+import {
+  NavigationRegular,
+  WrenchRegular,
+  WrenchFilled,
+  PlayRegular,
+  PlayFilled,
+  PlaySettingsRegular,
+  PlaySettingsFilled,
+  BroomRegular,
+  BroomFilled,
+  bundleIcon,
+} from "@fluentui/react-icons"
 import { useTranslation } from "react-i18next"
 
+const Wrench = bundleIcon(WrenchFilled, WrenchRegular)
 const Play = bundleIcon(PlayFilled, PlayRegular)
+const PlaySettings = bundleIcon(PlaySettingsFilled, PlaySettingsRegular)
+const Broom = bundleIcon(BroomFilled, BroomRegular)
 
 const useStyles = makeStyles({
   root: {
@@ -22,10 +36,14 @@ const useStyles = makeStyles({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ["-webkit-app-region" as any]: "no-drag",
   },
-  runButton: {
+  actionButton: {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ["-webkit-app-region" as any]: "no-drag",
     color: tokens.colorPaletteGreenForeground1,
+  },
+  cleanButton: {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ["-webkit-app-region" as any]: "no-drag",
   },
   title: {
     fontSize: tokens.fontSizeBase200,
@@ -39,11 +57,22 @@ const useStyles = makeStyles({
 interface TitleBarProps {
   onToggleSidebar?: () => void
   showSidebarToggle?: boolean
+  onCompile?: () => void
   onRun?: () => void
-  isRunning?: boolean
+  onCompileAndRun?: () => void
+  onClean?: () => void
+  isBusy?: boolean
 }
 
-export function TitleBar({ onToggleSidebar, showSidebarToggle, onRun, isRunning }: TitleBarProps) {
+export function TitleBar({
+  onToggleSidebar,
+  showSidebarToggle,
+  onCompile,
+  onRun,
+  onCompileAndRun,
+  onClean,
+  isBusy,
+}: TitleBarProps) {
   const styles = useStyles()
   const { t } = useTranslation()
 
@@ -62,16 +91,53 @@ export function TitleBar({ onToggleSidebar, showSidebarToggle, onRun, isRunning 
       )}
       <Text className={styles.title}>{t("app.title")}</Text>
       <div className={styles.spacer} />
+      {isBusy && <Spinner size="tiny" />}
+      {onCompile && (
+        <Button
+          appearance="subtle"
+          size="small"
+          className={styles.actionButton}
+          icon={<Wrench />}
+          onClick={onCompile}
+          disabled={isBusy}
+          aria-label={t("run.compile")}
+          title={t("run.compile")}
+        />
+      )}
       {onRun && (
         <Button
           appearance="subtle"
           size="small"
-          className={styles.runButton}
-          icon={isRunning ? <Spinner size="tiny" /> : <Play />}
+          className={styles.actionButton}
+          icon={<Play />}
           onClick={onRun}
-          disabled={isRunning}
+          disabled={isBusy}
           aria-label={t("run.run")}
           title={t("run.run")}
+        />
+      )}
+      {onCompileAndRun && (
+        <Button
+          appearance="subtle"
+          size="small"
+          className={styles.actionButton}
+          icon={<PlaySettings />}
+          onClick={onCompileAndRun}
+          disabled={isBusy}
+          aria-label={t("run.compileAndRun")}
+          title={t("run.compileAndRun")}
+        />
+      )}
+      {onClean && (
+        <Button
+          appearance="subtle"
+          size="small"
+          className={styles.cleanButton}
+          icon={<Broom />}
+          onClick={onClean}
+          disabled={isBusy}
+          aria-label={t("run.clean")}
+          title={t("run.clean")}
         />
       )}
     </div>

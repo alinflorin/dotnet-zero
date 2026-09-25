@@ -31,10 +31,15 @@
   "panel.empty": "Niciun rezultat încă.",
   "panel.close": "Închide panoul",
   "panel.toggle": "Comută panoul",
+  "run.compile": "Compilează",
   "run.run": "Rulează",
+  "run.compileAndRun": "Compilează și rulează",
+  "run.clean": "Curăță",
   "run.compiling": "Se compilează…",
   "run.failed": "Compilarea a eșuat.",
+  "run.succeeded": "Compilare reușită.",
   "run.finished": "Programul s-a încheiat.",
+  "run.cleaned": "Rezultatul compilării anterioare a fost șters.",
   "common.cancel": "Anulează",
   "common.create": "Creează"
 }

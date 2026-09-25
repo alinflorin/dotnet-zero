@@ -33,6 +33,7 @@ public sealed class ProjectWorkspace
     private readonly Dictionary<DocumentId, string> _fileIdByDocId = new();
     private readonly HashSet<string> _emptyFolders = new(StringComparer.Ordinal);
     private readonly HashSet<DocumentId> _hiddenDocumentIds = new();
+    private byte[]? _lastCompiledAssembly;
 
     public ProjectDto CreateProject(string name)
     {
@@ -101,6 +102,7 @@ public sealed class ProjectWorkspace
         var docId = ResolveFileId(fileId);
         var solution = _workspace!.CurrentSolution.WithDocumentText(docId, SourceText.From(content));
         _workspace.TryApplyChanges(solution);
+        _lastCompiledAssembly = null;
     }
 
     public IReadOnlyList<ProjectFileNode> AddFile(string? parentPath, string name)
@@ -109,6 +111,7 @@ public sealed class ProjectWorkspace
         var folders = SplitFolderPath(parentPath);
         EnsureUniqueName(folders, name);
         AddFileCore(folders, name, "");
+        _lastCompiledAssembly = null;
         return BuildTree();
     }
 
@@ -130,6 +133,7 @@ public sealed class ProjectWorkspace
             EnsureUniqueName(document.Folders.ToList(), newName, excludeFileId: id);
             var solution = _workspace!.CurrentSolution.WithDocumentName(docId, newName);
             _workspace.TryApplyChanges(solution);
+            _lastCompiledAssembly = null;
         }
         else
         {
@@ -148,6 +152,7 @@ public sealed class ProjectWorkspace
             _workspace.TryApplyChanges(solution);
             _docIdByFileId.Remove(id);
             _fileIdByDocId.Remove(docId);
+            _lastCompiledAssembly = null;
         }
         else
         {
@@ -157,7 +162,38 @@ public sealed class ProjectWorkspace
         return BuildTree();
     }
 
+    public async Task<CompileResult> CompileAsync()
+    {
+        var (success, diagnostics, assemblyBytes) = await EmitAsync().ConfigureAwait(false);
+        _lastCompiledAssembly = success ? assemblyBytes : null;
+        return new CompileResult(success, diagnostics);
+    }
+
+    public void Clean()
+    {
+        _lastCompiledAssembly = null;
+    }
+
+    public async Task<RunResult> RunAsync()
+    {
+        if (_lastCompiledAssembly is { } cached)
+            return await ExecuteAsync(cached, []).ConfigureAwait(false);
+
+        return await CompileAndRunAsync().ConfigureAwait(false);
+    }
+
     public async Task<RunResult> CompileAndRunAsync()
+    {
+        var (success, diagnostics, assemblyBytes) = await EmitAsync().ConfigureAwait(false);
+        _lastCompiledAssembly = success ? assemblyBytes : null;
+
+        if (!success)
+            return new RunResult(false, diagnostics, "", null);
+
+        return await ExecuteAsync(assemblyBytes!, diagnostics).ConfigureAwait(false);
+    }
+
+    private async Task<(bool Success, IReadOnlyList<CompileDiagnostic> Diagnostics, byte[]? AssemblyBytes)> EmitAsync()
     {
         EnsureProject();
         var compilation = await CurrentProject().GetCompilationAsync().ConfigureAwait(false)
@@ -170,10 +206,12 @@ public sealed class ProjectWorkspace
             .Select(ToCompileDiagnostic)
             .ToList();
 
-        if (!emitResult.Success)
-            return new RunResult(false, diagnostics, "", null);
+        return (emitResult.Success, diagnostics, emitResult.Success ? peStream.ToArray() : null);
+    }
 
-        var assembly = Assembly.Load(peStream.ToArray());
+    private static async Task<RunResult> ExecuteAsync(byte[] assemblyBytes, IReadOnlyList<CompileDiagnostic> diagnostics)
+    {
+        var assembly = Assembly.Load(assemblyBytes);
         var entryPoint = assembly.EntryPoint;
         if (entryPoint is null)
             return new RunResult(false, diagnostics, "", "No entry point (Main method) found.");
@@ -243,6 +281,7 @@ public sealed class ProjectWorkspace
         _emptyFolders.Clear();
         _hiddenDocumentIds.Clear();
         _roslynProjectId = null;
+        _lastCompiledAssembly = null;
     }
 
     private void AddHiddenGlobalUsings()
@@ -266,7 +305,7 @@ public sealed class ProjectWorkspace
         LanguageNames.CSharp,
         compilationOptions: new CSharpCompilationOptions(OutputKind.ConsoleApplication, nullableContextOptions: NullableContextOptions.Enable),
         parseOptions: new CSharpParseOptions(LanguageVersion.Latest),
-        metadataReferences: Net90.References.All);
+        metadataReferences: Net100.References.All);
 
     private void AddFileCore(IReadOnlyList<string> folders, string name, string content, string? existingId = null)
     {

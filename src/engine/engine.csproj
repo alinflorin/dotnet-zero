@@ -16,7 +16,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.12" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.14.0" />
-    <PackageReference Include="Basic.Reference.Assemblies.Net90" Version="1.8.12" />
+    <PackageReference Include="Basic.Reference.Assemblies.Net100" Version="1.8.12" />
   </ItemGroup>
 
   <Target Name="CopyEngineWebAssets" AfterTargets="Build">

@@ -5,7 +5,7 @@ import { ensureBlazorReady } from "../blazor/blazorReady"
 import { ProjectContext, type OpenFile, type ProjectStatus } from "./project-context"
 import { loadProjectSnapshot, saveProjectSnapshot } from "./persistence"
 import { findFirstFile, flattenFiles } from "./treeUtils"
-import type { ProjectDto, ProjectFileNode, ProjectSnapshot, RunResult } from "./types"
+import type { CompileResult, ProjectDto, ProjectFileNode, ProjectSnapshot, RunResult } from "./types"
 
 const SYNC_DEBOUNCE_MS = 500
 
@@ -174,10 +174,24 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     [invoke, applyTree, persistSnapshot],
   )
 
+  const compileProject = useCallback(async () => {
+    await flushSync()
+    return invoke<CompileResult>("Compile")
+  }, [invoke, flushSync])
+
   const runProject = useCallback(async () => {
+    await flushSync()
+    return invoke<RunResult>("Run")
+  }, [invoke, flushSync])
+
+  const compileAndRunProject = useCallback(async () => {
     await flushSync()
     return invoke<RunResult>("CompileAndRun")
   }, [invoke, flushSync])
+
+  const cleanProject = useCallback(async () => {
+    await invoke<void>("Clean")
+  }, [invoke])
 
   const value = useMemo(
     () => ({
@@ -195,7 +209,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       addFolder,
       renameEntry,
       deleteEntry,
+      compileProject,
       runProject,
+      compileAndRunProject,
+      cleanProject,
     }),
     [
       status,
@@ -211,7 +228,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       addFolder,
       renameEntry,
       deleteEntry,
+      compileProject,
       runProject,
+      compileAndRunProject,
+      cleanProject,
     ],
   )
 

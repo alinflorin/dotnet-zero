@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react"
-import type { ProjectDto, ProjectFileNode, RunResult } from "./types"
+import type { CompileResult, ProjectDto, ProjectFileNode, RunResult } from "./types"
 
 export interface OpenFile {
   id: string
@@ -24,7 +24,10 @@ export interface ProjectContextValue {
   addFolder: (parentPath: string | undefined, name: string) => Promise<void>
   renameEntry: (id: string, newName: string) => Promise<void>
   deleteEntry: (id: string) => Promise<void>
+  compileProject: () => Promise<CompileResult>
   runProject: () => Promise<RunResult>
+  compileAndRunProject: () => Promise<RunResult>
+  cleanProject: () => Promise<void>
 }
 
 export const ProjectContext = createContext<ProjectContextValue | undefined>(undefined)

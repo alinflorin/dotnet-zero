@@ -31,10 +31,15 @@
   "panel.empty": "No output yet.",
   "panel.close": "Close panel",
   "panel.toggle": "Toggle panel",
+  "run.compile": "Compile",
   "run.run": "Run",
+  "run.compileAndRun": "Compile and Run",
+  "run.clean": "Clean",
   "run.compiling": "Compiling…",
   "run.failed": "Build failed.",
+  "run.succeeded": "Build succeeded.",
   "run.finished": "Program finished.",
+  "run.cleaned": "Cleaned cached build output.",
   "common.cancel": "Cancel",
   "common.create": "Create"
 }

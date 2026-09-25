@@ -10,6 +10,7 @@ import { Panel } from "../panel/Panel"
 import { useResizablePane } from "../../hooks/useResizablePane"
 import { useProject } from "../../app/project/project-context"
 import { useLog } from "../../app/panel/log-context"
+import type { RunResult } from "../../app/project/types"
 
 const MOBILE_QUERY = "(max-width: 768px)"
 const DEFAULT_SIDEBAR_WIDTH = 260
@@ -77,22 +78,36 @@ function useIsMobile() {
 export function Shell() {
   const styles = useStyles()
   const { t } = useTranslation()
-  const { runProject } = useProject()
+  const { compileProject, runProject, compileAndRunProject, cleanProject } = useProject()
   const { appendLine, clear } = useLog()
   const [activeView, setActiveView] = useState<ActivityView>("explorer")
   const isMobile = useIsMobile()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [panelOpen, setPanelOpen] = useState(false)
-  const [isRunning, setIsRunning] = useState(false)
+  const [isBusy, setIsBusy] = useState(false)
 
-  const handleRun = useCallback(async () => {
-    if (isRunning) return
-    setIsRunning(true)
+  const handleCompile = useCallback(async () => {
+    if (isBusy) return
+    setIsBusy(true)
     setPanelOpen(true)
     clear("output")
     appendLine("output", t("run.compiling"))
     try {
-      const result = await runProject()
+      const result = await compileProject()
+      for (const diagnostic of result.diagnostics) {
+        const location = diagnostic.fileName ? `${diagnostic.fileName}(${diagnostic.line},${diagnostic.column}): ` : ""
+        appendLine("output", `${location}${diagnostic.severity}: ${diagnostic.message}`)
+      }
+      appendLine("output", result.success ? t("run.succeeded") : t("run.failed"))
+    } catch (error) {
+      appendLine("output", String(error))
+    } finally {
+      setIsBusy(false)
+    }
+  }, [isBusy, compileProject, appendLine, clear, t])
+
+  const reportRunResult = useCallback(
+    (result: RunResult) => {
       for (const diagnostic of result.diagnostics) {
         const location = diagnostic.fileName ? `${diagnostic.fileName}(${diagnostic.line},${diagnostic.column}): ` : ""
         appendLine("output", `${location}${diagnostic.severity}: ${diagnostic.message}`)
@@ -106,12 +121,46 @@ export function Shell() {
         if (result.exceptionMessage) appendLine("output", result.exceptionMessage)
         appendLine("output", t("run.finished"))
       }
+    },
+    [appendLine, t],
+  )
+
+  const handleRun = useCallback(async () => {
+    if (isBusy) return
+    setIsBusy(true)
+    setPanelOpen(true)
+    clear("output")
+    appendLine("output", t("run.compiling"))
+    try {
+      reportRunResult(await runProject())
     } catch (error) {
       appendLine("output", String(error))
     } finally {
-      setIsRunning(false)
+      setIsBusy(false)
     }
-  }, [isRunning, runProject, appendLine, clear, t])
+  }, [isBusy, runProject, reportRunResult, appendLine, clear, t])
+
+  const handleCompileAndRun = useCallback(async () => {
+    if (isBusy) return
+    setIsBusy(true)
+    setPanelOpen(true)
+    clear("output")
+    appendLine("output", t("run.compiling"))
+    try {
+      reportRunResult(await compileAndRunProject())
+    } catch (error) {
+      appendLine("output", String(error))
+    } finally {
+      setIsBusy(false)
+    }
+  }, [isBusy, compileAndRunProject, reportRunResult, appendLine, clear, t])
+
+  const handleClean = useCallback(async () => {
+    if (isBusy) return
+    await cleanProject()
+    setPanelOpen(true)
+    appendLine("output", t("run.cleaned"))
+  }, [isBusy, cleanProject, appendLine, t])
 
   const sidebarPane = useResizablePane({
     axis: "horizontal",
@@ -151,8 +200,11 @@ export function Shell() {
       <TitleBar
         onToggleSidebar={handleToggleSidebar}
         showSidebarToggle={isMobile}
+        onCompile={handleCompile}
         onRun={handleRun}
-        isRunning={isRunning}
+        onCompileAndRun={handleCompileAndRun}
+        onClean={handleClean}
+        isBusy={isBusy}
       />
       <div className={styles.main}>
         <div className={styles.workbench}>

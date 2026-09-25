@@ -36,6 +36,11 @@ export interface CompileDiagnostic {
   column: number
 }
 
+export interface CompileResult {
+  success: boolean
+  diagnostics: CompileDiagnostic[]
+}
+
 export interface RunResult {
   success: boolean
   diagnostics: CompileDiagnostic[]
