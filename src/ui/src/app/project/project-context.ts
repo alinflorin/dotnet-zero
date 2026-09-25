@@ -26,7 +26,6 @@ export interface ProjectContextValue {
   deleteEntry: (id: string) => Promise<void>
   compileProject: () => Promise<CompileResult>
   runProject: () => Promise<RunResult>
-  compileAndRunProject: () => Promise<RunResult>
   cleanProject: () => Promise<void>
 }
 

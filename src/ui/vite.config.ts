@@ -5,16 +5,18 @@ import babel from '@rolldown/plugin-babel'
 import { defineConfig, type Plugin } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
-// The engine build fingerprints its _framework/*.js files (e.g.
+// The engine build fingerprints its _framework/*.js(.mjs) files (e.g.
 // blazor.webassembly.<hash>.js, dotnet.<hash>.js) for cache busting, and the
-// hashes change on every engine build. Rather than hardcode stale names in
-// index.html, resolve whatever hashes are currently on disk and inject:
+// hashes change on every engine build. `dotnet publish` normally resolves
+// this itself by rewriting index.html's placeholders, but that resolution
+// doesn't happen for a plain `dotnet build` (what CopyEngineWebAssets in
+// engine.csproj runs), so we do it here instead:
 //  - a script tag for the fingerprinted blazor.webassembly.<hash>.js
-//  - an import map, because blazor.webassembly.js's `import("./dotnet.js")`
-//    resolves "./dotnet.js" relative to the script's own URL, i.e.
-//    /engine/_framework/dotnet.js. That literal (unfingerprinted) URL is the
-//    import map key; the import map is what redirects it to the actual
-//    fingerprinted dotnet.<hash>.js.
+//  - an import map covering every unfingerprinted path that blazor.webassembly.js
+//    and dotnet.js resolve relative to their own URL via bare `import(...)`
+//    calls: dotnet.js, dotnet.native.js, dotnet.native.worker.mjs, and
+//    dotnet.runtime.js. Missing any of these fails silently until the
+//    runtime tries to load that particular piece.
 function blazorScriptTag(): Plugin {
   const frameworkDir = path.resolve(import.meta.dirname, 'public/engine/_framework')
 
@@ -35,15 +37,18 @@ function blazorScriptTag(): Plugin {
   return {
     name: 'blazor-script-tag',
     transformIndexHtml() {
-      const dotnetSrc = resolveFingerprinted('dotnet', 'js')
       const blazorSrc = resolveFingerprinted('blazor\\.webassembly', 'js')
+      const imports = {
+        '/engine/_framework/dotnet.js': resolveFingerprinted('dotnet', 'js'),
+        '/engine/_framework/dotnet.native.js': resolveFingerprinted('dotnet\\.native', 'js'),
+        '/engine/_framework/dotnet.native.worker.mjs': resolveFingerprinted('dotnet\\.native\\.worker', 'mjs'),
+        '/engine/_framework/dotnet.runtime.js': resolveFingerprinted('dotnet\\.runtime', 'js'),
+      }
       return [
         {
           tag: 'script',
           attrs: { type: 'importmap' },
-          children: JSON.stringify({
-            imports: { '/engine/_framework/dotnet.js': dotnetSrc },
-          }),
+          children: JSON.stringify({ imports }),
           injectTo: 'body',
         },
         {

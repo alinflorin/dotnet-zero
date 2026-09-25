@@ -5,8 +5,6 @@ import {
   WrenchFilled,
   PlayRegular,
   PlayFilled,
-  PlaySettingsRegular,
-  PlaySettingsFilled,
   BroomRegular,
   BroomFilled,
   BugRegular,
@@ -17,7 +15,6 @@ import { useTranslation } from "react-i18next"
 
 const Wrench = bundleIcon(WrenchFilled, WrenchRegular)
 const Play = bundleIcon(PlayFilled, PlayRegular)
-const PlaySettings = bundleIcon(PlaySettingsFilled, PlaySettingsRegular)
 const Broom = bundleIcon(BroomFilled, BroomRegular)
 const Bug = bundleIcon(BugFilled, BugRegular)
 
@@ -62,7 +59,6 @@ interface TitleBarProps {
   showSidebarToggle?: boolean
   onCompile?: () => void
   onRun?: () => void
-  onCompileAndRun?: () => void
   onDebug?: () => void
   onClean?: () => void
   isBusy?: boolean
@@ -73,7 +69,6 @@ export function TitleBar({
   showSidebarToggle,
   onCompile,
   onRun,
-  onCompileAndRun,
   onDebug,
   onClean,
   isBusy,
@@ -119,18 +114,6 @@ export function TitleBar({
           disabled={isBusy}
           aria-label={t("run.run")}
           title={t("run.run")}
-        />
-      )}
-      {onCompileAndRun && (
-        <Button
-          appearance="subtle"
-          size="small"
-          className={styles.actionButton}
-          icon={<PlaySettings />}
-          onClick={onCompileAndRun}
-          disabled={isBusy}
-          aria-label={t("run.compileAndRun")}
-          title={t("run.compileAndRun")}
         />
       )}
       {onDebug && (

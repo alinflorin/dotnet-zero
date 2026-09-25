@@ -79,7 +79,7 @@ function useIsMobile() {
 export function Shell() {
   const styles = useStyles()
   const { t } = useTranslation()
-  const { compileProject, runProject, compileAndRunProject, cleanProject } = useProject()
+  const { compileProject, runProject, cleanProject } = useProject()
   const { appendLine, clear, panelOpen, showChannel, togglePanel } = useLog()
   const { startDebug } = useDebug()
   const [activeView, setActiveView] = useState<ActivityView>("explorer")
@@ -141,21 +141,6 @@ export function Shell() {
     }
   }, [isBusy, runProject, reportRunResult, appendLine, clear, showChannel, t])
 
-  const handleCompileAndRun = useCallback(async () => {
-    if (isBusy) return
-    setIsBusy(true)
-    showChannel("output")
-    clear("output")
-    appendLine("output", t("run.compiling"))
-    try {
-      reportRunResult(await compileAndRunProject())
-    } catch (error) {
-      appendLine("output", String(error))
-    } finally {
-      setIsBusy(false)
-    }
-  }, [isBusy, compileAndRunProject, reportRunResult, appendLine, clear, showChannel, t])
-
   const handleDebug = useCallback(async () => {
     if (isBusy) return
     setActiveView("debug")
@@ -211,7 +196,6 @@ export function Shell() {
         showSidebarToggle={isMobile}
         onCompile={handleCompile}
         onRun={handleRun}
-        onCompileAndRun={handleCompileAndRun}
         onDebug={handleDebug}
         onClean={handleClean}
         isBusy={isBusy}

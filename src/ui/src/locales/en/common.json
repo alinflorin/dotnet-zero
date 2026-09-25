@@ -33,7 +33,6 @@
   "panel.toggle": "Toggle panel",
   "run.compile": "Compile",
   "run.run": "Run",
-  "run.compileAndRun": "Compile and Run",
   "run.debug": "Debug",
   "run.clean": "Clean",
   "run.compiling": "Compiling…",

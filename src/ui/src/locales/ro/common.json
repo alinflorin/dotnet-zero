@@ -33,7 +33,6 @@
   "panel.toggle": "Comută panoul",
   "run.compile": "Compilează",
   "run.run": "Rulează",
-  "run.compileAndRun": "Compilează și rulează",
   "run.debug": "Depanează",
   "run.clean": "Curăță",
   "run.compiling": "Se compilează…",

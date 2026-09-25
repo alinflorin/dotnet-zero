@@ -184,11 +184,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     return invoke<RunResult>("Run")
   }, [invoke, flushSync])
 
-  const compileAndRunProject = useCallback(async () => {
-    await flushSync()
-    return invoke<RunResult>("CompileAndRun")
-  }, [invoke, flushSync])
-
   const cleanProject = useCallback(async () => {
     await invoke<void>("Clean")
   }, [invoke])
@@ -211,7 +206,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       deleteEntry,
       compileProject,
       runProject,
-      compileAndRunProject,
       cleanProject,
     }),
     [
@@ -230,7 +224,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       deleteEntry,
       compileProject,
       runProject,
-      compileAndRunProject,
       cleanProject,
     ],
   )
