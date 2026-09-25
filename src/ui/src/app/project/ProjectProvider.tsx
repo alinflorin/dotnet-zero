@@ -327,17 +327,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     [invoke, applySolution, persistSnapshot],
   )
 
-  const exportSlnx = useCallback(async () => {
-    const content = await invoke<string>("ExportSlnx")
-    const blob = new Blob([content], { type: "application/xml" })
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement("a")
-    anchor.href = url
-    anchor.download = `${solution?.name ?? "Solution"}.slnx`
-    anchor.click()
-    URL.revokeObjectURL(url)
-  }, [invoke, solution])
-
   const closeFile = useCallback((fileId: string) => {
     setEditorState((prev) => {
       const openFiles = prev.openFiles.filter((f) => f.id !== fileId)
@@ -552,7 +541,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       startCreate,
       cancelCreate,
       setProjectReferences,
-      exportSlnx,
       exportZip,
       addFile,
       addFolder,
@@ -589,7 +577,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       startCreate,
       cancelCreate,
       setProjectReferences,
-      exportSlnx,
       exportZip,
       addFile,
       addFolder,

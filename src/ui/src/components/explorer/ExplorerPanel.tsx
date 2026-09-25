@@ -222,9 +222,6 @@ export function ExplorerPanel() {
                 <MenuItem icon={<AddRegular />} onClick={() => setNewSolutionOpen(true)}>
                   {t("solution.newSolution")}
                 </MenuItem>
-                <MenuItem icon={<ArrowDownloadRegular />} onClick={() => void project.exportSlnx()}>
-                  {t("solution.exportSlnx")}
-                </MenuItem>
                 <MenuItem icon={<ArrowDownloadRegular />} onClick={() => void project.exportZip()}>
                   {t("solution.exportZip")}
                 </MenuItem>

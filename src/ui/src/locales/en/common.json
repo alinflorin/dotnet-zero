@@ -15,7 +15,6 @@
   "solution.title": "Solution '{{name}}'",
   "solution.newProject": "Add New Project…",
   "solution.newSolution": "New Solution…",
-  "solution.exportSlnx": "Export Solution (.slnx)",
   "solution.exportZip": "Download Solution as .zip",
   "solution.newSolutionInFolder": "New Solution in Folder…",
   "solution.openFromFolder": "Open Solution from Folder…",

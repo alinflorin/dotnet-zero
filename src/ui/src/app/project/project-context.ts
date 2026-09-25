@@ -66,7 +66,6 @@ export interface ProjectContextValue {
   startCreate: (mode: "file" | "folder") => void
   cancelCreate: () => void
   setProjectReferences: (projectId: string, referencedProjectIds: string[]) => Promise<void>
-  exportSlnx: () => Promise<void>
   exportZip: () => Promise<void>
   addFile: (projectId: string, parentPath: string | undefined, name: string) => Promise<void>
   addFolder: (projectId: string, parentPath: string | undefined, name: string) => Promise<void>

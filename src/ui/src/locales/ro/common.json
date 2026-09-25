@@ -15,7 +15,6 @@
   "solution.title": "Soluția '{{name}}'",
   "solution.newProject": "Adaugă proiect nou…",
   "solution.newSolution": "Soluție nouă…",
-  "solution.exportSlnx": "Exportă soluția (.slnx)",
   "solution.exportZip": "Descarcă soluția ca .zip",
   "solution.newSolutionInFolder": "Soluție nouă într-un folder…",
   "solution.openFromFolder": "Deschide soluția dintr-un folder…",
