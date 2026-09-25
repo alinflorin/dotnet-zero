@@ -2,6 +2,7 @@ import * as monaco from "monaco-editor"
 import { invokeDotNet } from "../../hooks/useDotNet"
 import { ensureBlazorReady } from "../blazor/blazorReady"
 import { fileIdOf } from "./fileId"
+import { getProjectIdForFile } from "../project/fileProjectRegistry"
 
 export const CSHARP_LANGUAGE_ID = "csharp"
 
@@ -104,9 +105,13 @@ export function registerCSharpLanguageFeatures() {
       const word = model.getWordUntilPosition(position)
       const range = new monaco.Range(position.lineNumber, word.startColumn, position.lineNumber, word.endColumn)
 
+      const projectId = getProjectIdForFile(fileIdOf(model))
+      if (!projectId) return { suggestions: [] }
+
       try {
         const items = await invokeDotNet<CompletionItemDto[]>(
           "GetCompletions",
+          projectId,
           fileIdOf(model),
           model.getValue(),
           model.getOffsetAt(position),
@@ -130,9 +135,13 @@ export function registerCSharpLanguageFeatures() {
     async provideHover(model, position) {
       await ensureBlazorReady()
 
+      const projectId = getProjectIdForFile(fileIdOf(model))
+      if (!projectId) return null
+
       try {
         const hover = await invokeDotNet<HoverDto | null>(
           "GetHover",
+          projectId,
           fileIdOf(model),
           model.getValue(),
           model.getOffsetAt(position),
@@ -154,9 +163,13 @@ export function registerCSharpLanguageFeatures() {
     async provideSignatureHelp(model, position, _token, context) {
       await ensureBlazorReady()
 
+      const projectId = getProjectIdForFile(fileIdOf(model))
+      if (!projectId) return null
+
       try {
         const help = await invokeDotNet<SignatureHelpDto | null>(
           "GetSignatureHelp",
+          projectId,
           fileIdOf(model),
           model.getValue(),
           model.getOffsetAt(position),
@@ -192,8 +205,11 @@ export function registerCSharpLanguageFeatures() {
     await ensureBlazorReady()
     if (model.isDisposed()) return
 
+    const projectId = getProjectIdForFile(fileIdOf(model))
+    if (!projectId) return
+
     try {
-      const diagnostics = await invokeDotNet<LiveDiagnosticDto[]>("GetLiveDiagnostics", fileIdOf(model), model.getValue())
+      const diagnostics = await invokeDotNet<LiveDiagnosticDto[]>("GetLiveDiagnostics", projectId, fileIdOf(model), model.getValue())
       if (model.isDisposed()) return
       monaco.editor.setModelMarkers(
         model,

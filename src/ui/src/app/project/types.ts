@@ -28,6 +28,25 @@ export interface ProjectSnapshot {
   emptyFolders: string[]
 }
 
+/// A dictionary keyed by referencing project id -> the ids of the projects it references.
+export type ProjectReferenceGraph = Record<string, string[]>
+
+export interface SolutionDto {
+  id: string
+  name: string
+  projects: ProjectDto[]
+  projectReferences: ProjectReferenceGraph
+  startupProjectId: string | null
+}
+
+export interface SolutionSnapshot {
+  id: string
+  name: string
+  projects: ProjectSnapshot[]
+  projectReferences: ProjectReferenceGraph
+  startupProjectId: string | null
+}
+
 export interface InstalledPackageDto {
   id: string
   version: string

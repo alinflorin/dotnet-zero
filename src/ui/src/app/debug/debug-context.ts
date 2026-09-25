@@ -21,7 +21,7 @@ export interface DebugContextValue {
   callStack: CallFrameDto[]
   lastExceptionMessage: string | null
   toggleBreakpoint: (fileId: string, line: number) => void
-  startDebug: () => Promise<void>
+  startDebug: (projectId?: string) => Promise<void>
   continue_: () => void
   stepOver: () => void
   stepInto: () => void

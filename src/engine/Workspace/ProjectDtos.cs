@@ -12,6 +12,23 @@ public sealed record ProjectSnapshot(
     IReadOnlyList<ProjectFileSnapshot> Files,
     IReadOnlyList<string> EmptyFolders);
 
+/// <summary>The full multi-project workspace: every open project plus the project-reference graph
+/// between them (keyed by referencing project id -> the ids it references) and which project
+/// Run/Debug targets by default.</summary>
+public sealed record SolutionDto(
+    string Id,
+    string Name,
+    IReadOnlyList<ProjectDto> Projects,
+    IReadOnlyDictionary<string, IReadOnlyList<string>> ProjectReferences,
+    string? StartupProjectId);
+
+public sealed record SolutionSnapshot(
+    string Id,
+    string Name,
+    IReadOnlyList<ProjectSnapshot> Projects,
+    IReadOnlyDictionary<string, IReadOnlyList<string>> ProjectReferences,
+    string? StartupProjectId);
+
 public sealed record PackageReferenceSnapshot(string Id, string Version);
 
 public sealed record InstalledPackageDto(string Id, string Version, IReadOnlyList<string> AssemblyNames, bool IsDirect);

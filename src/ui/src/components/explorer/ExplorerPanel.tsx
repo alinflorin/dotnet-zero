@@ -14,10 +14,16 @@ import {
   DialogActions,
   Input,
   Tooltip,
+  Menu,
+  MenuTrigger,
+  MenuPopover,
+  MenuList,
+  MenuItem,
 } from "@fluentui/react-components"
+import { AddRegular, ArrowDownloadRegular, MoreHorizontalRegular } from "@fluentui/react-icons"
 import { useTranslation } from "react-i18next"
 import { useProject } from "../../app/project/project-context"
-import { FileTree } from "./FileTree"
+import { ProjectNode } from "./ProjectNode"
 
 const useStyles = makeStyles({
   empty: {
@@ -38,9 +44,31 @@ const useStyles = makeStyles({
     rowGap: tokens.spacingVerticalS,
     width: "100%",
   },
-  tree: {
+  root: {
+    display: "flex",
+    flexDirection: "column",
     width: "100%",
+  },
+  solutionHeader: {
+    display: "flex",
+    alignItems: "center",
+    columnGap: tokens.spacingHorizontalXS,
     padding: tokens.spacingHorizontalXS,
+    fontSize: "12px",
+    fontWeight: tokens.fontWeightSemibold,
+  },
+  solutionName: {
+    flexGrow: 1,
+    minWidth: 0,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    fontSize: "12px",
+  },
+  projects: {
+    display: "flex",
+    flexDirection: "column",
+    padding: tokens.spacingHorizontalXXS,
   },
 })
 
@@ -49,13 +77,15 @@ export function ExplorerPanel() {
   const { t } = useTranslation()
   const project = useProject()
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [addProjectOpen, setAddProjectOpen] = useState(false)
   const [projectName, setProjectName] = useState("MyProject")
+  const [newProjectName, setNewProjectName] = useState("Project2")
 
   if (project.status === "loading") {
     return <Spinner size="small" label={t("sidebar.loading")} />
   }
 
-  if (project.status === "empty" || !project.project) {
+  if (project.status === "empty" || project.projects.length === 0) {
     return (
       <div className={styles.empty}>
         <Text className={styles.emptyText}>{t("sidebar.noFolder")}</Text>
@@ -73,7 +103,7 @@ export function ExplorerPanel() {
                   const name = projectName.trim()
                   if (!name) return
                   setDialogOpen(false)
-                  void project.createProject(name)
+                  void project.createSolution(name)
                 }}
               >
                 <DialogBody>
@@ -109,15 +139,65 @@ export function ExplorerPanel() {
   }
 
   return (
-    <div className={styles.tree}>
-      <FileTree
-        files={project.project.files}
-        onOpenFile={(node) => void project.openFile(node)}
-        onAddFile={(parentPath, name) => void project.addFile(parentPath, name)}
-        onAddFolder={(parentPath, name) => void project.addFolder(parentPath, name)}
-        onRename={(id, newName) => void project.renameEntry(id, newName)}
-        onDelete={(id) => void project.deleteEntry(id)}
-      />
+    <div className={styles.root}>
+      <div className={styles.solutionHeader}>
+        <Text className={styles.solutionName} title={project.solutionName ?? ""}>
+          {t("solution.title", { name: project.solutionName })}
+        </Text>
+        <Menu>
+          <MenuTrigger disableButtonEnhancement>
+            <Button appearance="subtle" size="small" icon={<MoreHorizontalRegular />} aria-label={t("solution.menu")} />
+          </MenuTrigger>
+          <MenuPopover>
+            <MenuList>
+              <MenuItem icon={<AddRegular />} onClick={() => setAddProjectOpen(true)}>
+                {t("solution.newProject")}
+              </MenuItem>
+              <MenuItem icon={<ArrowDownloadRegular />} onClick={() => void project.exportSlnx()}>
+                {t("solution.exportSlnx")}
+              </MenuItem>
+            </MenuList>
+          </MenuPopover>
+        </Menu>
+      </div>
+      <div className={styles.projects}>
+        {project.projects.map((p) => (
+          <ProjectNode key={p.id} project={p} />
+        ))}
+      </div>
+      <Dialog open={addProjectOpen} onOpenChange={(_, data) => setAddProjectOpen(data.open)}>
+        <DialogSurface>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              const name = newProjectName.trim()
+              if (!name) return
+              setAddProjectOpen(false)
+              void project.addProject(name)
+            }}
+          >
+            <DialogBody>
+              <DialogTitle>{t("solution.newProject")}</DialogTitle>
+              <DialogContent>
+                <Input
+                  autoFocus
+                  value={newProjectName}
+                  onChange={(_, data) => setNewProjectName(data.value)}
+                  placeholder={t("sidebar.projectNamePlaceholder")}
+                />
+              </DialogContent>
+              <DialogActions>
+                <DialogTrigger disableButtonEnhancement>
+                  <Button appearance="secondary">{t("common.cancel")}</Button>
+                </DialogTrigger>
+                <Button appearance="primary" type="submit" disabled={!newProjectName.trim()}>
+                  {t("common.add")}
+                </Button>
+              </DialogActions>
+            </DialogBody>
+          </form>
+        </DialogSurface>
+      </Dialog>
     </div>
   )
 }

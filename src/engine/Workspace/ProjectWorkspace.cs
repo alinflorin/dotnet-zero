@@ -53,8 +53,12 @@ public sealed class ProjectWorkspace
     private readonly HashSet<DocumentId> _hiddenDocumentIds = new();
     private byte[]? _lastCompiledAssembly;
     private readonly NuGetPackageManager _packageManager = new();
+    private readonly List<MetadataReference> _projectReferenceMetadata = new();
     private static readonly ImmutableArray<MetadataReference> BaseMetadataReferences =
         Net100.References.All.Cast<MetadataReference>().ToImmutableArray();
+
+    public string Id => _projectId;
+    public string Name => _projectName ?? "";
 
     // The .csproj is real XML the user can view/edit, but it isn't a Roslyn document — feeding
     // it into the AdhocWorkspace's C# project would make the compiler try to parse XML as C#.
@@ -164,7 +168,7 @@ public sealed class ProjectWorkspace
         EnsureProject();
         await _packageManager.InstallAsync(id, version).ConfigureAwait(false);
         RegenerateCsprojPackageReferences();
-        ApplyPackageReferences();
+        ApplyReferences();
         return BuildProjectDto();
     }
 
@@ -173,7 +177,7 @@ public sealed class ProjectWorkspace
         EnsureProject();
         _packageManager.Uninstall(id);
         RegenerateCsprojPackageReferences();
-        ApplyPackageReferences();
+        ApplyReferences();
         return BuildProjectDto();
     }
 
@@ -183,12 +187,46 @@ public sealed class ProjectWorkspace
         return _packageManager.Installed;
     }
 
-    /// <summary>Base .NET reference assemblies plus every installed NuGet package's assemblies — used both for
-    /// this workspace's own compilation and by <see cref="DebugWorkspace"/>'s separate debug-instrumented one.</summary>
+    /// <summary>Base .NET reference assemblies plus every installed NuGet package's assemblies plus the
+    /// compiled assemblies of any referenced sibling projects — used both for this workspace's own
+    /// compilation and by <see cref="DebugWorkspace"/>'s separate debug-instrumented one.</summary>
     public IReadOnlyList<MetadataReference> GetMetadataReferences() =>
-        BaseMetadataReferences.Concat(_packageManager.References).ToImmutableArray();
+        BaseMetadataReferences.Concat(_packageManager.References).Concat(_projectReferenceMetadata).ToImmutableArray();
 
-    private void ApplyPackageReferences()
+    /// <summary>Supplies the compiled output of the projects this one references (see
+    /// <see cref="SolutionWorkspace.SetProjectReferences"/>) as additional metadata references, so this
+    /// project's compilation can see their public types.</summary>
+    public void SetProjectReferenceAssemblies(IReadOnlyList<byte[]> assemblies)
+    {
+        EnsureProject();
+        _projectReferenceMetadata.Clear();
+        foreach (var bytes in assemblies)
+            _projectReferenceMetadata.Add(MetadataReference.CreateFromImage(bytes));
+        ApplyReferences();
+    }
+
+    /// <summary>Rewrites the &lt;ProjectReference&gt; items in the .csproj to reflect the current reference
+    /// graph — generated from <see cref="SolutionWorkspace"/>'s authoritative graph, one-directional (unlike
+    /// package references, hand-editing these back doesn't reparse into the graph).</summary>
+    public void SetProjectReferenceNames(IReadOnlyList<string> referencedProjectNames)
+    {
+        EnsureProject();
+        RegenerateCsprojProjectReferences(referencedProjectNames);
+    }
+
+    internal void SetLastCompiledAssembly(byte[]? bytes) => _lastCompiledAssembly = bytes;
+
+    internal Task<(bool Success, IReadOnlyList<CompileDiagnostic> Diagnostics, byte[]? AssemblyBytes)> EmitForBuildAsync() => EmitAsync();
+
+    public void Rename(string newName)
+    {
+        EnsureProject();
+        _projectName = newName;
+        _csprojFileName = $"{newName}.csproj";
+        _lastCompiledAssembly = null;
+    }
+
+    private void ApplyReferences()
     {
         var solution = _workspace!.CurrentSolution.WithProjectMetadataReferences(_roslynProjectId!, GetMetadataReferences());
         _workspace.TryApplyChanges(solution);
@@ -667,6 +705,7 @@ public sealed class ProjectWorkspace
         _roslynProjectId = null;
         _lastCompiledAssembly = null;
         _packageManager.Reset();
+        _projectReferenceMetadata.Clear();
         _csprojFileId = "";
         _csprojFileName = "";
         _csprojContent = "";
@@ -677,6 +716,52 @@ public sealed class ProjectWorkspace
         _csprojFileId = Guid.NewGuid().ToString("n");
         _csprojFileName = $"{name}.csproj";
         _csprojContent = CsprojTemplate;
+    }
+
+    /// <summary>Rewrites the &lt;ProjectReference&gt; items in the .csproj to match
+    /// <see cref="SolutionWorkspace"/>'s current reference graph for this project. Purely
+    /// generated/display text — unlike packages, hand-edited ProjectReference items aren't parsed
+    /// back into the graph, since paths here don't map to real files on disk.</summary>
+    private void RegenerateCsprojProjectReferences(IReadOnlyList<string> referencedProjectNames)
+    {
+        XDocument doc;
+        try
+        {
+            doc = XDocument.Parse(_csprojContent);
+        }
+        catch (System.Xml.XmlException)
+        {
+            return;
+        }
+
+        var root = doc.Root;
+        if (root is null) return;
+
+        var projectRefs = root.Elements("ItemGroup").Elements("ProjectReference").ToList();
+        var refItemGroup = projectRefs.Count > 0 ? projectRefs[0].Parent : null;
+        foreach (var projectRef in projectRefs)
+            projectRef.Remove();
+
+        if (referencedProjectNames.Count == 0)
+        {
+            if (refItemGroup is { HasElements: false })
+                refItemGroup.Remove();
+        }
+        else
+        {
+            var itemGroup = refItemGroup;
+            if (itemGroup is null)
+            {
+                itemGroup = new XElement("ItemGroup");
+                root.Add(itemGroup);
+            }
+
+            foreach (var name in referencedProjectNames.OrderBy(n => n, StringComparer.OrdinalIgnoreCase))
+                itemGroup.Add(new XElement("ProjectReference", new XAttribute("Include", $"..\\{name}\\{name}.csproj")));
+        }
+
+        _csprojContent = doc.ToString() + "\n";
+        _lastCompiledAssembly = null;
     }
 
     /// <summary>Rewrites the &lt;PackageReference&gt; items in the .csproj to match the package
@@ -785,7 +870,7 @@ public sealed class ProjectWorkspace
         }
 
         if (changed)
-            ApplyPackageReferences();
+            ApplyReferences();
     }
 
     private void AddHiddenGlobalUsings()
@@ -972,6 +1057,8 @@ public sealed class ProjectWorkspace
         public string SortKey { get => _sortKey ?? Name; set => _sortKey = value; }
         public Dictionary<string, TreeNode> Children { get; } = new(StringComparer.Ordinal);
     }
+
+    public ProjectDto GetProjectDto() => BuildProjectDto();
 
     private ProjectDto BuildProjectDto() => new(_projectId, _projectName!, BuildTree(), _packageManager.Installed);
 

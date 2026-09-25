@@ -7,14 +7,18 @@ using Microsoft.CodeAnalysis.Text;
 
 namespace engine.Workspace;
 
+/// <summary>The files and metadata references to debug — the startup project plus every project it
+/// (transitively) references, built by <see cref="SolutionWorkspace.StartDebugAsync"/> so breakpoints
+/// work in referenced-project code too, not just the startup project's own files.</summary>
+public sealed record DebugBundle(IReadOnlyList<ProjectFileSnapshot> Files, IReadOnlyList<MetadataReference> MetadataReferences);
+
 /// <summary>
 /// Owns the lifecycle of a single debug session: compiles a debug-only, instrumented copy of
-/// the current project (see <see cref="DebugInstrumentationRewriter"/>), runs it on a background
+/// the target project bundle (see <see cref="DebugInstrumentationRewriter"/>), runs it on a background
 /// thread, and relays breakpoint/step/continue/stop commands to it. Entirely separate from
-/// <see cref="ProjectWorkspace"/>'s cached compiled assembly used by normal Compile/Run — the two
-/// never interact beyond reading the current file contents via <see cref="ProjectWorkspace.GetSnapshotAsync"/>.
+/// <see cref="ProjectWorkspace"/>'s cached compiled assembly used by normal Compile/Run.
 /// </summary>
-public sealed class DebugWorkspace(ProjectWorkspace project)
+public sealed class DebugWorkspace
 {
     private const string GlobalUsingsContent =
         "global using System;\n" +
@@ -58,11 +62,9 @@ public sealed class DebugWorkspace(ProjectWorkspace project)
         return new DebugStateDto(raw.Status, frames, raw.Output, raw.Success, raw.ExceptionMessage);
     }
 
-    public async Task<CompileResult> StartDebugAsync()
+    public async Task<CompileResult> StartDebugAsync(DebugBundle bundle)
     {
         Stop();
-
-        var snapshot = await project.GetSnapshotAsync().ConfigureAwait(false);
 
         var adhoc = new AdhocWorkspace();
         var projectId = ProjectId.CreateNewId("__debug");
@@ -74,7 +76,7 @@ public sealed class DebugWorkspace(ProjectWorkspace project)
             LanguageNames.CSharp,
             compilationOptions: new CSharpCompilationOptions(OutputKind.ConsoleApplication, nullableContextOptions: NullableContextOptions.Enable),
             parseOptions: new CSharpParseOptions(LanguageVersion.Latest),
-            metadataReferences: project.GetMetadataReferences());
+            metadataReferences: bundle.MetadataReferences);
         adhoc.AddProject(projectInfo);
 
         adhoc.AddDocument(DocumentInfo.Create(
@@ -88,13 +90,8 @@ public sealed class DebugWorkspace(ProjectWorkspace project)
             loader: TextLoader.From(TextAndVersion.Create(SourceText.From(DebugRuntimeSource.Code), VersionStamp.Create()))));
 
         var docIds = new List<(DocumentId Id, string FileId)>();
-        foreach (var file in snapshot.Files)
+        foreach (var file in bundle.Files)
         {
-            // GetSnapshotAsync() includes the project's .csproj alongside the real source files —
-            // it isn't C#, so it must not be fed into this debug compilation.
-            if (file.Folders.Count == 0 && file.Name.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase))
-                continue;
-
             var docId = DocumentId.CreateNewId(projectId);
             adhoc.AddDocument(DocumentInfo.Create(
                 docId,

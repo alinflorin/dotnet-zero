@@ -1,4 +1,15 @@
-import { makeStyles, tokens, Text, Button, Spinner } from "@fluentui/react-components"
+import {
+  makeStyles,
+  tokens,
+  Text,
+  Button,
+  Spinner,
+  Menu,
+  MenuTrigger,
+  MenuPopover,
+  MenuList,
+  MenuItem,
+} from "@fluentui/react-components"
 import {
   NavigationRegular,
   WrenchRegular,
@@ -9,9 +20,12 @@ import {
   BroomFilled,
   BugRegular,
   BugFilled,
+  AddRegular,
+  ArrowDownloadRegular,
   bundleIcon,
 } from "@fluentui/react-icons"
 import { useTranslation } from "react-i18next"
+import { useProject } from "../../app/project/project-context"
 
 const Wrench = bundleIcon(WrenchFilled, WrenchRegular)
 const Play = bundleIcon(PlayFilled, PlayRegular)
@@ -40,6 +54,11 @@ const useStyles = makeStyles({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ["-webkit-app-region" as any]: "no-drag",
   },
+  menuButton: {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ["-webkit-app-region" as any]: "no-drag",
+    fontSize: tokens.fontSizeBase200,
+  },
   cleanButton: {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ["-webkit-app-region" as any]: "no-drag",
@@ -60,6 +79,8 @@ interface TitleBarProps {
   onRun?: () => void
   onDebug?: () => void
   onClean?: () => void
+  onNewProject?: () => void
+  onNewSolution?: () => void
   isBusy?: boolean
 }
 
@@ -70,10 +91,13 @@ export function TitleBar({
   onRun,
   onDebug,
   onClean,
+  onNewProject,
+  onNewSolution,
   isBusy,
 }: TitleBarProps) {
   const styles = useStyles()
   const { t } = useTranslation()
+  const project = useProject()
 
   return (
     <div className={styles.root}>
@@ -89,6 +113,28 @@ export function TitleBar({
         />
       )}
       <Text className={styles.title}>{t("app.title")}</Text>
+      {project.projects.length > 0 && (
+        <Menu>
+          <MenuTrigger disableButtonEnhancement>
+            <Button appearance="transparent" size="small" className={styles.menuButton}>
+              {t("project.menu")}
+            </Button>
+          </MenuTrigger>
+          <MenuPopover>
+            <MenuList>
+              <MenuItem icon={<AddRegular />} onClick={onNewProject}>
+                {t("solution.newProject")}
+              </MenuItem>
+              <MenuItem icon={<AddRegular />} onClick={onNewSolution}>
+                {t("solution.newSolution")}
+              </MenuItem>
+              <MenuItem icon={<ArrowDownloadRegular />} onClick={() => void project.exportSlnx()}>
+                {t("solution.exportSlnx")}
+              </MenuItem>
+            </MenuList>
+          </MenuPopover>
+        </Menu>
+      )}
       <div className={styles.spacer} />
       {isBusy && <Spinner size="tiny" />}
       {onCompile && (

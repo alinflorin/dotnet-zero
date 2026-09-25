@@ -1,5 +1,17 @@
 import { useCallback, useEffect, useState } from "react"
-import { makeStyles, tokens, Text, Caption1, Button, Spinner, Input, Badge, mergeClasses } from "@fluentui/react-components"
+import {
+  makeStyles,
+  tokens,
+  Text,
+  Caption1,
+  Button,
+  Spinner,
+  Input,
+  Badge,
+  mergeClasses,
+  Dropdown,
+  Option,
+} from "@fluentui/react-components"
 import { SearchRegular, ArrowDownloadRegular, DeleteRegular } from "@fluentui/react-icons"
 import { useTranslation } from "react-i18next"
 import { useProject } from "../../app/project/project-context"
@@ -78,10 +90,13 @@ export function NuGetPanel() {
   const [error, setError] = useState<string | null>(null)
   const [pendingIds, setPendingIds] = useState<ReadonlySet<string>>(new Set())
 
+  const projectId = project.selectedProjectId
+  const activeProject = project.projects.find((p) => p.id === projectId) ?? null
+
   const runSearch = useCallback(
     async (value: string) => {
       const trimmed = value.trim()
-      if (!trimmed) {
+      if (!trimmed || !projectId) {
         setResults([])
         setSearching(false)
         return
@@ -89,7 +104,7 @@ export function NuGetPanel() {
       setSearching(true)
       setError(null)
       try {
-        const response = await project.searchPackages(trimmed, 0, PAGE_SIZE)
+        const response = await project.searchPackages(projectId, trimmed, 0, PAGE_SIZE)
         setResults(response.results)
       } catch {
         setError(t("nuget.searchFailed"))
@@ -97,7 +112,7 @@ export function NuGetPanel() {
         setSearching(false)
       }
     },
-    [project, t],
+    [project, projectId, t],
   )
 
   const [debouncedSearch] = useDebouncedCallback(runSearch, SEARCH_DEBOUNCE_MS)
@@ -125,16 +140,30 @@ export function NuGetPanel() {
     [t],
   )
 
-  if (project.status !== "ready" || !project.project) {
+  if (project.status !== "ready" || project.projects.length === 0 || !activeProject) {
     return <Text className={styles.emptyText}>{t("nuget.noProject")}</Text>
   }
 
-  const installedPackages = project.project.packages
+  const installedPackages = activeProject.packages
   const directPackages = installedPackages.filter((p) => p.isDirect)
   const transitivePackages = installedPackages.filter((p) => !p.isDirect)
 
   return (
     <div className={styles.root}>
+      {project.projects.length > 1 && (
+        <Dropdown
+          size="small"
+          value={activeProject.name}
+          selectedOptions={[activeProject.id]}
+          onOptionSelect={(_, data) => data.optionValue && project.setSelectedProject(data.optionValue)}
+        >
+          {project.projects.map((p) => (
+            <Option key={p.id} value={p.id}>
+              {p.name}
+            </Option>
+          ))}
+        </Dropdown>
+      )}
       <Input
         contentBefore={<SearchRegular />}
         value={query}
@@ -174,7 +203,7 @@ export function NuGetPanel() {
                         appearance="subtle"
                         size="small"
                         icon={<ArrowDownloadRegular />}
-                        onClick={() => void withPending(pkg.id, () => project.installPackage(pkg.id, pkg.version))}
+                        onClick={() => void withPending(pkg.id, () => project.installPackage(projectId!, pkg.id, pkg.version))}
                       >
                         {t("nuget.install")}
                       </Button>
@@ -210,7 +239,7 @@ export function NuGetPanel() {
                       appearance="subtle"
                       size="small"
                       icon={<DeleteRegular />}
-                      onClick={() => void withPending(pkg.id, () => project.uninstallPackage(pkg.id))}
+                      onClick={() => void withPending(pkg.id, () => project.uninstallPackage(projectId!, pkg.id))}
                     />
                   )}
                 </div>

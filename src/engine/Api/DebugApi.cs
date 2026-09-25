@@ -6,29 +6,27 @@ namespace engine.Api;
 
 public static class DebugApi
 {
-    internal static readonly DebugWorkspace Workspace = new(ProjectApi.Workspace);
+    [JSInvokable]
+    public static Task<CompileResult> StartDebug(string? projectId) => ProjectApi.Solution.StartDebugAsync(projectId);
 
     [JSInvokable]
-    public static Task<CompileResult> StartDebug() => Workspace.StartDebugAsync();
+    public static void SetBreakpoints(string fileId, int[] lines) => ProjectApi.Solution.Debug.SetBreakpoints(fileId, lines);
 
     [JSInvokable]
-    public static void SetBreakpoints(string fileId, int[] lines) => Workspace.SetBreakpoints(fileId, lines);
+    public static DebugStateDto Poll() => ProjectApi.Solution.Debug.Poll();
 
     [JSInvokable]
-    public static DebugStateDto Poll() => Workspace.Poll();
+    public static void Continue() => ProjectApi.Solution.Debug.Continue();
 
     [JSInvokable]
-    public static void Continue() => Workspace.Continue();
+    public static void StepOver() => ProjectApi.Solution.Debug.StepOver();
 
     [JSInvokable]
-    public static void StepOver() => Workspace.StepOver();
+    public static void StepInto() => ProjectApi.Solution.Debug.StepInto();
 
     [JSInvokable]
-    public static void StepInto() => Workspace.StepInto();
+    public static void StepOut() => ProjectApi.Solution.Debug.StepOut();
 
     [JSInvokable]
-    public static void StepOut() => Workspace.StepOut();
-
-    [JSInvokable]
-    public static void Stop() => Workspace.Stop();
+    public static void Stop() => ProjectApi.Solution.Debug.Stop();
 }

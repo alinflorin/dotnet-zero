@@ -3,15 +3,17 @@ import { useDotNet } from "../../hooks/useDotNet"
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback"
 import { ensureBlazorReady } from "../blazor/blazorReady"
 import { ProjectContext, type OpenFile, type ProjectStatus } from "./project-context"
-import { loadProjectSnapshot, saveProjectSnapshot } from "./persistence"
+import { loadSolutionSnapshot, saveSolutionSnapshot } from "./persistence"
+import { setFileProjectRegistry } from "./fileProjectRegistry"
 import { findFirstFile, flattenFiles } from "./treeUtils"
 import type {
   CompileResult,
   NuGetSearchResponseDto,
   ProjectDto,
   ProjectFileNode,
-  ProjectSnapshot,
   RunResult,
+  SolutionDto,
+  SolutionSnapshot,
 } from "./types"
 
 const SYNC_DEBOUNCE_MS = 500
@@ -23,10 +25,19 @@ interface EditorState {
 
 const EMPTY_EDITOR_STATE: EditorState = { openFiles: [], activeFileId: null }
 
+function buildFileProjectMap(projects: ProjectDto[]): Map<string, string> {
+  const map = new Map<string, string>()
+  for (const project of projects) {
+    for (const fileId of flattenFiles(project.files).keys()) map.set(fileId, project.id)
+  }
+  return map
+}
+
 export function ProjectProvider({ children }: { children: ReactNode }) {
   const { invoke } = useDotNet()
   const [status, setStatus] = useState<ProjectStatus>("loading")
-  const [project, setProject] = useState<ProjectDto | null>(null)
+  const [solution, setSolution] = useState<SolutionDto | null>(null)
+  const [selectedProjectId, setSelectedProjectIdState] = useState<string | null>(null)
   const [editorState, setEditorState] = useState<EditorState>(EMPTY_EDITOR_STATE)
   const [dirtyFileIds, setDirtyFileIds] = useState<ReadonlySet<string>>(new Set())
 
@@ -35,34 +46,14 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     editorStateRef.current = editorState
   }, [editorState])
 
-  const persistSnapshot = useCallback(async () => {
-    const snapshot = await invoke<ProjectSnapshot>("GetSnapshot")
-    await saveProjectSnapshot(snapshot)
-  }, [invoke])
+  const applySolution = useCallback((next: SolutionDto) => {
+    setSolution(next)
+    setFileProjectRegistry(buildFileProjectMap(next.projects))
+    setSelectedProjectIdState((prev) => (prev && next.projects.some((p) => p.id === prev) ? prev : next.startupProjectId))
 
-  useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      await ensureBlazorReady()
-      const snapshot = await loadProjectSnapshot()
-      if (cancelled) return
-      if (snapshot) {
-        const hydrated = await invoke<ProjectDto>("HydrateProject", snapshot)
-        if (cancelled) return
-        setProject(hydrated)
-        setStatus("ready")
-      } else {
-        setStatus("empty")
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [invoke])
+    const fileMap = new Map<string, ProjectFileNode>()
+    for (const project of next.projects) for (const [id, node] of flattenFiles(project.files)) fileMap.set(id, node)
 
-  const applyTree = useCallback((files: ProjectFileNode[]) => {
-    setProject((prev) => (prev ? { ...prev, files } : prev))
-    const fileMap = flattenFiles(files)
     setEditorState((prev) => {
       const openFiles = prev.openFiles
         .filter((f) => fileMap.has(f.id))
@@ -78,36 +69,135 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
+  const persistSnapshot = useCallback(async () => {
+    const snapshot = await invoke<SolutionSnapshot>("GetSolutionSnapshot")
+    await saveSolutionSnapshot(snapshot)
+  }, [invoke])
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      await ensureBlazorReady()
+      const snapshot = await loadSolutionSnapshot()
+      if (cancelled) return
+      if (snapshot) {
+        const hydrated = await invoke<SolutionDto>("HydrateSolution", snapshot)
+        if (cancelled) return
+        applySolution(hydrated)
+        setStatus("ready")
+      } else {
+        setStatus("empty")
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [invoke, applySolution])
+
   const openFile = useCallback(
-    async (node: ProjectFileNode) => {
+    async (projectId: string, node: ProjectFileNode) => {
       if (node.kind !== "file") return
       if (editorStateRef.current.openFiles.some((f) => f.id === node.id)) {
         setEditorState((prev) => ({ ...prev, activeFileId: node.id }))
+        setSelectedProjectIdState(projectId)
         return
       }
-      const content = await invoke<string>("GetFileContent", node.id)
+      const content = await invoke<string>("GetFileContent", projectId, node.id)
       setEditorState((prev) =>
         prev.openFiles.some((f) => f.id === node.id)
           ? { ...prev, activeFileId: node.id }
-          : { openFiles: [...prev.openFiles, { id: node.id, name: node.name, content }], activeFileId: node.id },
+          : {
+              openFiles: [...prev.openFiles, { id: node.id, projectId, name: node.name, content }],
+              activeFileId: node.id,
+            },
       )
+      setSelectedProjectIdState(projectId)
     },
     [invoke],
   )
 
-  const createProject = useCallback(
+  const createSolution = useCallback(
     async (name: string) => {
-      const created = await invoke<ProjectDto>("CreateProject", name)
-      setProject(created)
+      const created = await invoke<SolutionDto>("CreateSolution", name)
+      applySolution(created)
       setEditorState(EMPTY_EDITOR_STATE)
       setDirtyFileIds(new Set())
       setStatus("ready")
       await persistSnapshot()
-      const firstFile = findFirstFile(created.files)
-      if (firstFile) await openFile(firstFile)
+      const firstProject = created.projects[0]
+      const firstFile = firstProject ? findFirstFile(firstProject.files) : undefined
+      if (firstProject && firstFile) await openFile(firstProject.id, firstFile)
     },
-    [invoke, persistSnapshot, openFile],
+    [invoke, applySolution, persistSnapshot, openFile],
   )
+
+  const addProject = useCallback(
+    async (name: string) => {
+      const updated = await invoke<SolutionDto>("AddProject", name)
+      applySolution(updated)
+      await persistSnapshot()
+    },
+    [invoke, applySolution, persistSnapshot],
+  )
+
+  const removeProject = useCallback(
+    async (projectId: string) => {
+      const updated = await invoke<SolutionDto>("RemoveProject", projectId)
+      applySolution(updated)
+      setEditorState((prev) => {
+        const openFiles = prev.openFiles.filter((f) => f.projectId !== projectId)
+        const activeFileId =
+          prev.activeFileId && openFiles.some((f) => f.id === prev.activeFileId)
+            ? prev.activeFileId
+            : (openFiles[openFiles.length - 1]?.id ?? null)
+        return { openFiles, activeFileId }
+      })
+      await persistSnapshot()
+    },
+    [invoke, applySolution, persistSnapshot],
+  )
+
+  const renameProject = useCallback(
+    async (projectId: string, newName: string) => {
+      const updated = await invoke<SolutionDto>("RenameProject", projectId, newName)
+      applySolution(updated)
+      await persistSnapshot()
+    },
+    [invoke, applySolution, persistSnapshot],
+  )
+
+  const setStartupProject = useCallback(
+    async (projectId: string) => {
+      const updated = await invoke<SolutionDto>("SetStartupProject", projectId)
+      applySolution(updated)
+      await persistSnapshot()
+    },
+    [invoke, applySolution, persistSnapshot],
+  )
+
+  const setSelectedProject = useCallback((projectId: string) => {
+    setSelectedProjectIdState(projectId)
+  }, [])
+
+  const setProjectReferences = useCallback(
+    async (projectId: string, referencedProjectIds: string[]) => {
+      const updated = await invoke<SolutionDto>("SetProjectReferences", projectId, referencedProjectIds)
+      applySolution(updated)
+      await persistSnapshot()
+    },
+    [invoke, applySolution, persistSnapshot],
+  )
+
+  const exportSlnx = useCallback(async () => {
+    const content = await invoke<string>("ExportSlnx")
+    const blob = new Blob([content], { type: "application/xml" })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement("a")
+    anchor.href = url
+    anchor.download = `${solution?.name ?? "Solution"}.slnx`
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }, [invoke, solution])
 
   const closeFile = useCallback((fileId: string) => {
     setEditorState((prev) => {
@@ -120,10 +210,12 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
   const setActiveFile = useCallback((fileId: string) => {
     setEditorState((prev) => ({ ...prev, activeFileId: fileId }))
+    const projectId = editorStateRef.current.openFiles.find((f) => f.id === fileId)?.projectId
+    if (projectId) setSelectedProjectIdState(projectId)
   }, [])
 
-  const [debouncedSync, flushSync] = useDebouncedCallback(async (fileId: string, content: string) => {
-    await invoke<void>("UpdateFileContent", fileId, content)
+  const [debouncedSync, flushSync] = useDebouncedCallback(async (fileId: string, projectId: string, content: string) => {
+    await invoke<void>("UpdateFileContent", projectId, fileId, content)
     await persistSnapshot()
     setDirtyFileIds((prev) => {
       if (!prev.has(fileId)) return prev
@@ -135,68 +227,112 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
   const updateFileContent = useCallback(
     (fileId: string, content: string) => {
+      const projectId = editorStateRef.current.openFiles.find((f) => f.id === fileId)?.projectId
+      if (!projectId) return
       setEditorState((prev) => ({
         ...prev,
         openFiles: prev.openFiles.map((f) => (f.id === fileId ? { ...f, content } : f)),
       }))
       setDirtyFileIds((prev) => (prev.has(fileId) ? prev : new Set(prev).add(fileId)))
-      debouncedSync(fileId, content)
+      debouncedSync(fileId, projectId, content)
     },
     [debouncedSync],
   )
 
+  const applyProjectTree = useCallback(
+    (projectId: string, files: ProjectFileNode[]) => {
+      setSolution((prev) => {
+        if (!prev) return prev
+        const next = { ...prev, projects: prev.projects.map((p) => (p.id === projectId ? { ...p, files } : p)) }
+        setFileProjectRegistry(buildFileProjectMap(next.projects))
+        return next
+      })
+      const fileMap = flattenFiles(files)
+      setEditorState((prev) => {
+        const openFiles = prev.openFiles
+          .filter((f) => f.projectId !== projectId || fileMap.has(f.id))
+          .map((f) => {
+            if (f.projectId !== projectId) return f
+            const node = fileMap.get(f.id)!
+            return node.name === f.name ? f : { ...f, name: node.name }
+          })
+        const activeFileId =
+          prev.activeFileId && openFiles.some((f) => f.id === prev.activeFileId)
+            ? prev.activeFileId
+            : (openFiles[openFiles.length - 1]?.id ?? null)
+        return { openFiles, activeFileId }
+      })
+    },
+    [],
+  )
+
   const addFile = useCallback(
-    async (parentPath: string | undefined, name: string) => {
-      const files = await invoke<ProjectFileNode[]>("AddFile", parentPath ?? null, name)
-      applyTree(files)
+    async (projectId: string, parentPath: string | undefined, name: string) => {
+      const files = await invoke<ProjectFileNode[]>("AddFile", projectId, parentPath ?? null, name)
+      applyProjectTree(projectId, files)
       await persistSnapshot()
     },
-    [invoke, applyTree, persistSnapshot],
+    [invoke, applyProjectTree, persistSnapshot],
   )
 
   const addFolder = useCallback(
-    async (parentPath: string | undefined, name: string) => {
-      const files = await invoke<ProjectFileNode[]>("AddFolder", parentPath ?? null, name)
-      applyTree(files)
+    async (projectId: string, parentPath: string | undefined, name: string) => {
+      const files = await invoke<ProjectFileNode[]>("AddFolder", projectId, parentPath ?? null, name)
+      applyProjectTree(projectId, files)
       await persistSnapshot()
     },
-    [invoke, applyTree, persistSnapshot],
+    [invoke, applyProjectTree, persistSnapshot],
   )
 
   const renameEntry = useCallback(
-    async (id: string, newName: string) => {
-      const files = await invoke<ProjectFileNode[]>("RenameEntry", id, newName)
-      applyTree(files)
+    async (projectId: string, id: string, newName: string) => {
+      const files = await invoke<ProjectFileNode[]>("RenameEntry", projectId, id, newName)
+      applyProjectTree(projectId, files)
       await persistSnapshot()
     },
-    [invoke, applyTree, persistSnapshot],
+    [invoke, applyProjectTree, persistSnapshot],
   )
 
   const deleteEntry = useCallback(
-    async (id: string) => {
-      const files = await invoke<ProjectFileNode[]>("DeleteEntry", id)
-      applyTree(files)
+    async (projectId: string, id: string) => {
+      const files = await invoke<ProjectFileNode[]>("DeleteEntry", projectId, id)
+      applyProjectTree(projectId, files)
       await persistSnapshot()
     },
-    [invoke, applyTree, persistSnapshot],
+    [invoke, applyProjectTree, persistSnapshot],
   )
 
-  const compileProject = useCallback(async () => {
+  const compileProject = useCallback(
+    async (projectId: string) => {
+      await flushSync()
+      return invoke<CompileResult>("Compile", projectId)
+    },
+    [invoke, flushSync],
+  )
+
+  const runProject = useCallback(
+    async (projectId: string) => {
+      await flushSync()
+      return invoke<RunResult>("Run", projectId)
+    },
+    [invoke, flushSync],
+  )
+
+  const runStartupProject = useCallback(async () => {
     await flushSync()
-    return invoke<CompileResult>("Compile")
+    return invoke<RunResult>("Run", null)
   }, [invoke, flushSync])
 
-  const runProject = useCallback(async () => {
-    await flushSync()
-    return invoke<RunResult>("Run")
-  }, [invoke, flushSync])
-
-  const cleanProject = useCallback(async () => {
-    await invoke<void>("Clean")
-  }, [invoke])
+  const cleanProject = useCallback(
+    async (projectId: string) => {
+      await invoke<void>("Clean", projectId)
+    },
+    [invoke],
+  )
 
   const searchPackages = useCallback(
-    (query: string, skip: number, take: number) => invoke<NuGetSearchResponseDto>("SearchPackages", query, skip, take),
+    (projectId: string, query: string, skip: number, take: number) =>
+      invoke<NuGetSearchResponseDto>("SearchPackages", projectId, query, skip, take),
     [invoke],
   )
 
@@ -204,31 +340,34 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   // engine side. If that file happens to be open in an editor tab already, its in-memory content
   // was fetched before the rewrite and won't reflect it — refetch so the open tab stays in sync
   // instead of silently going stale until the user closes and reopens it.
-  const refreshOpenCsprojTab = useCallback(async () => {
-    const csprojFile = editorStateRef.current.openFiles.find((f) => f.name.endsWith(".csproj"))
-    if (!csprojFile) return
-    const content = await invoke<string>("GetFileContent", csprojFile.id)
-    setEditorState((prev) => ({
-      ...prev,
-      openFiles: prev.openFiles.map((f) => (f.id === csprojFile.id ? { ...f, content } : f)),
-    }))
-  }, [invoke])
+  const refreshOpenCsprojTab = useCallback(
+    async (projectId: string) => {
+      const csprojFile = editorStateRef.current.openFiles.find((f) => f.projectId === projectId && f.name.endsWith(".csproj"))
+      if (!csprojFile) return
+      const content = await invoke<string>("GetFileContent", projectId, csprojFile.id)
+      setEditorState((prev) => ({
+        ...prev,
+        openFiles: prev.openFiles.map((f) => (f.id === csprojFile.id ? { ...f, content } : f)),
+      }))
+    },
+    [invoke],
+  )
 
   const installPackage = useCallback(
-    async (id: string, version?: string) => {
-      const updated = await invoke<ProjectDto>("InstallPackage", id, version ?? null)
-      setProject(updated)
-      await refreshOpenCsprojTab()
+    async (projectId: string, id: string, version?: string) => {
+      const updatedProject = await invoke<ProjectDto>("InstallPackage", projectId, id, version ?? null)
+      setSolution((prev) => (prev ? { ...prev, projects: prev.projects.map((p) => (p.id === projectId ? updatedProject : p)) } : prev))
+      await refreshOpenCsprojTab(projectId)
       await persistSnapshot()
     },
     [invoke, persistSnapshot, refreshOpenCsprojTab],
   )
 
   const uninstallPackage = useCallback(
-    async (id: string) => {
-      const updated = await invoke<ProjectDto>("UninstallPackage", id)
-      setProject(updated)
-      await refreshOpenCsprojTab()
+    async (projectId: string, id: string) => {
+      const updatedProject = await invoke<ProjectDto>("UninstallPackage", projectId, id)
+      setSolution((prev) => (prev ? { ...prev, projects: prev.projects.map((p) => (p.id === projectId ? updatedProject : p)) } : prev))
+      await refreshOpenCsprojTab(projectId)
       await persistSnapshot()
     },
     [invoke, persistSnapshot, refreshOpenCsprojTab],
@@ -237,11 +376,22 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       status,
-      project,
+      solutionName: solution?.name ?? null,
+      projects: solution?.projects ?? [],
+      projectReferences: solution?.projectReferences ?? {},
+      startupProjectId: solution?.startupProjectId ?? null,
+      selectedProjectId,
       openFiles: editorState.openFiles,
       activeFileId: editorState.activeFileId,
       dirtyFileIds,
-      createProject,
+      createSolution,
+      addProject,
+      removeProject,
+      renameProject,
+      setStartupProject,
+      setSelectedProject,
+      setProjectReferences,
+      exportSlnx,
       openFile,
       closeFile,
       setActiveFile,
@@ -251,6 +401,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       renameEntry,
       deleteEntry,
       compileProject,
+      runStartupProject,
       runProject,
       cleanProject,
       searchPackages,
@@ -259,10 +410,18 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     }),
     [
       status,
-      project,
+      solution,
+      selectedProjectId,
       editorState,
       dirtyFileIds,
-      createProject,
+      createSolution,
+      addProject,
+      removeProject,
+      renameProject,
+      setStartupProject,
+      setSelectedProject,
+      setProjectReferences,
+      exportSlnx,
       openFile,
       closeFile,
       setActiveFile,
@@ -272,6 +431,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       renameEntry,
       deleteEntry,
       compileProject,
+      runStartupProject,
       runProject,
       cleanProject,
       searchPackages,

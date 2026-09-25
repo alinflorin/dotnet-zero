@@ -9,6 +9,7 @@ import type { ProjectFileNode } from "../../app/project/types"
 
 interface FlatFile {
   node: ProjectFileNode
+  projectId: string
   path: string
 }
 
@@ -27,14 +28,14 @@ interface FileResult {
 const MIN_QUERY_LENGTH = 1
 const SEARCH_DEBOUNCE_MS = 300
 
-function flattenWithPaths(nodes: ProjectFileNode[], prefix = ""): FlatFile[] {
+function flattenWithPaths(nodes: ProjectFileNode[], projectId: string, prefix = ""): FlatFile[] {
   const result: FlatFile[] = []
   for (const node of nodes) {
     const path = prefix ? `${prefix}/${node.name}` : node.name
     if (node.kind === "file") {
-      result.push({ node, path })
+      result.push({ node, projectId, path })
     } else if (node.children) {
-      result.push(...flattenWithPaths(node.children, path))
+      result.push(...flattenWithPaths(node.children, projectId, path))
     }
   }
   return result
@@ -154,7 +155,10 @@ export function SearchPanel() {
     [debouncedSetQuery],
   )
 
-  const files = useMemo(() => (project.project ? flattenWithPaths(project.project.files) : []), [project.project])
+  const files = useMemo(
+    () => project.projects.flatMap((p) => flattenWithPaths(p.files, p.id)),
+    [project.projects],
+  )
 
   useEffect(() => {
     const token = ++searchToken.current
@@ -176,7 +180,7 @@ export function SearchPanel() {
         let content = contentCache.current.get(file.node.id)
         if (content === undefined) {
           try {
-            content = await invoke<string>("GetFileContent", file.node.id)
+            content = await invoke<string>("GetFileContent", file.projectId, file.node.id)
           } catch {
             continue
           }
@@ -230,7 +234,7 @@ export function SearchPanel() {
         value={query}
         onChange={(_, data) => handleQueryChange(data.value)}
       />
-      {!project.project ? (
+      {project.projects.length === 0 ? (
         <Text className={styles.summary}>{t("search.noProject")}</Text>
       ) : searching ? (
         <Spinner size="tiny" label={t("search.searching")} />
@@ -255,7 +259,7 @@ export function SearchPanel() {
                   <div
                     key={match.lineNumber}
                     className={styles.matchRow}
-                    onClick={() => void project.openFile(file.node)}
+                    onClick={() => void project.openFile(file.projectId, file.node)}
                   >
                     <span className={styles.lineNumber}>{match.lineNumber}</span>
                     <span className={styles.snippet}>

@@ -60,29 +60,33 @@ export function DebugProvider({ children }: { children: ReactNode }) {
     pollRef.current = poll
   }, [poll])
 
-  const startDebug = useCallback(async () => {
-    stopPolling()
-    outputLengthRef.current = 0
-    setLastExceptionMessage(null)
-    setCallStack([])
-    setStatus("starting")
-    appendLine("debug", "Starting debug session…")
+  const startDebug = useCallback(
+    async (projectId?: string) => {
+      stopPolling()
+      outputLengthRef.current = 0
+      setLastExceptionMessage(null)
+      setCallStack([])
+      setStatus("starting")
+      appendLine("debug", "Starting debug session…")
 
-    await ensureBlazorReady()
-    const result = await invoke<{ success: boolean; diagnostics: { severity: string; message: string; line: number; column: number }[] }>(
-      "StartDebug",
-    )
+      await ensureBlazorReady()
+      const result = await invoke<{ success: boolean; diagnostics: { severity: string; message: string; line: number; column: number }[] }>(
+        "StartDebug",
+        projectId ?? null,
+      )
 
-    if (!result.success) {
-      for (const diagnostic of result.diagnostics) {
-        appendLine("debug", `(${diagnostic.line},${diagnostic.column}): ${diagnostic.severity}: ${diagnostic.message}`)
+      if (!result.success) {
+        for (const diagnostic of result.diagnostics) {
+          appendLine("debug", `(${diagnostic.line},${diagnostic.column}): ${diagnostic.severity}: ${diagnostic.message}`)
+        }
+        setStatus("stopped")
+        return
       }
-      setStatus("stopped")
-      return
-    }
 
-    void poll()
-  }, [invoke, appendLine, stopPolling, poll])
+      void poll()
+    },
+    [invoke, appendLine, stopPolling, poll],
+  )
 
   const resumeWith = useCallback(
     (method: string) => {

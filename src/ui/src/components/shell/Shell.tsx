@@ -79,7 +79,8 @@ function useIsMobile() {
 export function Shell() {
   const styles = useStyles()
   const { t } = useTranslation()
-  const { compileProject, runProject, cleanProject } = useProject()
+  const { compileProject, runStartupProject, cleanProject, selectedProjectId, startupProjectId, addProject, createSolution } = useProject()
+  const targetProjectId = selectedProjectId ?? startupProjectId
   const { appendLine, clear, panelOpen, showChannel, togglePanel } = useLog()
   const { startDebug } = useDebug()
   const [activeView, setActiveView] = useState<ActivityView>("explorer")
@@ -88,13 +89,13 @@ export function Shell() {
   const [isBusy, setIsBusy] = useState(false)
 
   const handleCompile = useCallback(async () => {
-    if (isBusy) return
+    if (isBusy || !targetProjectId) return
     setIsBusy(true)
     showChannel("output")
     clear("output")
     appendLine("output", t("run.compiling"))
     try {
-      const result = await compileProject()
+      const result = await compileProject(targetProjectId)
       for (const diagnostic of result.diagnostics) {
         const location = diagnostic.fileName ? `${diagnostic.fileName}(${diagnostic.line},${diagnostic.column}): ` : ""
         appendLine("output", `${location}${diagnostic.severity}: ${diagnostic.message}`)
@@ -105,7 +106,7 @@ export function Shell() {
     } finally {
       setIsBusy(false)
     }
-  }, [isBusy, compileProject, appendLine, clear, showChannel, t])
+  }, [isBusy, targetProjectId, compileProject, appendLine, clear, showChannel, t])
 
   const reportRunResult = useCallback(
     (result: RunResult) => {
@@ -133,13 +134,13 @@ export function Shell() {
     clear("output")
     appendLine("output", t("run.compiling"))
     try {
-      reportRunResult(await runProject())
+      reportRunResult(await runStartupProject())
     } catch (error) {
       appendLine("output", String(error))
     } finally {
       setIsBusy(false)
     }
-  }, [isBusy, runProject, reportRunResult, appendLine, clear, showChannel, t])
+  }, [isBusy, runStartupProject, reportRunResult, appendLine, clear, showChannel, t])
 
   const handleDebug = useCallback(async () => {
     if (isBusy) return
@@ -154,11 +155,21 @@ export function Shell() {
   }, [isBusy, startDebug, appendLine, clear, showChannel])
 
   const handleClean = useCallback(async () => {
-    if (isBusy) return
-    await cleanProject()
+    if (isBusy || !targetProjectId) return
+    await cleanProject(targetProjectId)
     showChannel("output")
     appendLine("output", t("run.cleaned"))
-  }, [isBusy, cleanProject, appendLine, showChannel, t])
+  }, [isBusy, targetProjectId, cleanProject, appendLine, showChannel, t])
+
+  const handleNewProject = useCallback(() => {
+    const name = window.prompt(t("sidebar.projectNamePlaceholder"))
+    if (name?.trim()) void addProject(name.trim())
+  }, [addProject, t])
+
+  const handleNewSolution = useCallback(() => {
+    const name = window.prompt(t("solution.newSolutionNamePlaceholder"))
+    if (name?.trim()) void createSolution(name.trim())
+  }, [createSolution, t])
 
   const sidebarPane = useResizablePane({
     axis: "horizontal",
@@ -198,6 +209,8 @@ export function Shell() {
         onRun={handleRun}
         onDebug={handleDebug}
         onClean={handleClean}
+        onNewProject={handleNewProject}
+        onNewSolution={handleNewSolution}
         isBusy={isBusy}
       />
       <div className={styles.main}>

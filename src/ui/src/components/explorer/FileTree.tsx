@@ -37,6 +37,7 @@ const useStyles = makeStyles({
     display: "flex",
     flexDirection: "column",
     width: "100%",
+    fontSize: "12px",
   },
   toolbar: {
     display: "flex",
@@ -50,6 +51,7 @@ const useStyles = makeStyles({
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
+    fontSize: "12px",
   },
   moreButton: {
     minWidth: "20px",
@@ -290,7 +292,7 @@ function FileTreeNode({ node, editing, onSetEditing, onOpenFile, onDelete, commi
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
       >
-        <TreeItemLayout iconBefore={<DocumentRegular />} actions={isProjectFile ? undefined : menu}>
+        <TreeItemLayout iconBefore={<DocumentRegular fontSize={14} />} actions={isProjectFile ? undefined : menu}>
           <span className={styles.rowLabel}>{node.name}</span>
         </TreeItemLayout>
       </TreeItem>
@@ -305,7 +307,7 @@ function FileTreeNode({ node, editing, onSetEditing, onOpenFile, onDelete, commi
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <TreeItemLayout iconBefore={<FolderRegular />} actions={menu}>
+      <TreeItemLayout iconBefore={<FolderRegular fontSize={14} />} actions={menu}>
         <span className={styles.rowLabel}>{node.name}</span>
       </TreeItemLayout>
       <Tree>

@@ -5,47 +5,71 @@ namespace engine.Api;
 
 public static class ProjectApi
 {
-    internal static readonly ProjectWorkspace Workspace = new();
+    internal static readonly SolutionWorkspace Solution = new();
 
     [JSInvokable]
-    public static ProjectDto CreateProject(string name) => Workspace.CreateProject(name);
+    public static SolutionDto CreateSolution(string name) => Solution.CreateSolution(name);
 
     [JSInvokable]
-    public static Task<ProjectDto> HydrateProject(ProjectSnapshot snapshot) => Workspace.HydrateProjectAsync(snapshot);
+    public static Task<SolutionDto> HydrateSolution(SolutionSnapshot snapshot) => Solution.HydrateAsync(snapshot);
 
     [JSInvokable]
-    public static Task<ProjectSnapshot> GetSnapshot() => Workspace.GetSnapshotAsync();
+    public static Task<SolutionSnapshot> GetSolutionSnapshot() => Solution.GetSnapshotAsync();
 
     [JSInvokable]
-    public static IReadOnlyList<ProjectFileNode> GetFileTree() => Workspace.GetFileTree();
+    public static SolutionDto AddProject(string name) => Solution.AddProject(name);
 
     [JSInvokable]
-    public static Task<string> GetFileContent(string fileId) => Workspace.GetFileContentAsync(fileId);
+    public static SolutionDto RemoveProject(string projectId) => Solution.RemoveProject(projectId);
 
     [JSInvokable]
-    public static IReadOnlyList<ProjectFileNode> AddFile(string? parentPath, string name) => Workspace.AddFile(parentPath, name);
+    public static SolutionDto RenameProject(string projectId, string newName) => Solution.RenameProject(projectId, newName);
 
     [JSInvokable]
-    public static IReadOnlyList<ProjectFileNode> AddFolder(string? parentPath, string name) => Workspace.AddFolder(parentPath, name);
+    public static SolutionDto SetStartupProject(string projectId) => Solution.SetStartupProject(projectId);
 
     [JSInvokable]
-    public static Task UpdateFileContent(string fileId, string content) => Workspace.UpdateFileContent(fileId, content);
+    public static SolutionDto SetProjectReferences(string projectId, string[] referencedProjectIds) =>
+        Solution.SetProjectReferences(projectId, referencedProjectIds);
 
     [JSInvokable]
-    public static IReadOnlyList<ProjectFileNode> RenameEntry(string id, string newName) => Workspace.RenameEntry(id, newName);
+    public static string ExportSlnx() => Solution.ExportSlnx();
 
     [JSInvokable]
-    public static IReadOnlyList<ProjectFileNode> DeleteEntry(string id) => Workspace.DeleteEntry(id);
+    public static IReadOnlyList<ProjectFileNode> GetFileTree(string projectId) => Solution.Project(projectId).GetFileTree();
 
     [JSInvokable]
-    public static Task<CompileResult> Compile() => Workspace.CompileAsync();
+    public static Task<string> GetFileContent(string projectId, string fileId) => Solution.Project(projectId).GetFileContentAsync(fileId);
 
     [JSInvokable]
-    public static void Clean() => Workspace.Clean();
+    public static IReadOnlyList<ProjectFileNode> AddFile(string projectId, string? parentPath, string name) =>
+        Solution.Project(projectId).AddFile(parentPath, name);
 
     [JSInvokable]
-    public static Task<RunResult> Run() => Workspace.RunAsync();
+    public static IReadOnlyList<ProjectFileNode> AddFolder(string projectId, string? parentPath, string name) =>
+        Solution.Project(projectId).AddFolder(parentPath, name);
 
     [JSInvokable]
-    public static Task<RunResult> CompileAndRun() => Workspace.CompileAndRunAsync();
+    public static Task UpdateFileContent(string projectId, string fileId, string content) =>
+        Solution.Project(projectId).UpdateFileContent(fileId, content);
+
+    [JSInvokable]
+    public static IReadOnlyList<ProjectFileNode> RenameEntry(string projectId, string id, string newName) =>
+        Solution.Project(projectId).RenameEntry(id, newName);
+
+    [JSInvokable]
+    public static IReadOnlyList<ProjectFileNode> DeleteEntry(string projectId, string id) =>
+        Solution.Project(projectId).DeleteEntry(id);
+
+    [JSInvokable]
+    public static Task<CompileResult> Compile(string projectId) => Solution.CompileAsync(projectId);
+
+    [JSInvokable]
+    public static void Clean(string projectId) => Solution.Project(projectId).Clean();
+
+    [JSInvokable]
+    public static Task<RunResult> Run(string? projectId) => Solution.RunAsync(projectId);
+
+    [JSInvokable]
+    public static Task<RunResult> CompileAndRun(string? projectId) => Solution.CompileAndRunAsync(projectId);
 }
