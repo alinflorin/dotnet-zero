@@ -5,7 +5,7 @@ namespace engine.Api;
 
 public static class ProjectApi
 {
-    private static readonly ProjectWorkspace Workspace = new();
+    internal static readonly ProjectWorkspace Workspace = new();
 
     [JSInvokable]
     public static ProjectDto CreateProject(string name) => Workspace.CreateProject(name);

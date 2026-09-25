@@ -10,9 +10,13 @@ declare global {
 
 const ASSEMBLY_NAME = "engine";
 
+export function invokeDotNet<T>(methodIdentifier: string, ...args: unknown[]) {
+  return window.DotNet.invokeMethodAsync<T>(ASSEMBLY_NAME, methodIdentifier, ...args);
+}
+
 export function useDotNet() {
   const invoke = useCallback(<T>(methodIdentifier: string, ...args: unknown[]) => {
-    return window.DotNet.invokeMethodAsync<T>(ASSEMBLY_NAME, methodIdentifier, ...args);
+    return invokeDotNet<T>(methodIdentifier, ...args);
   }, []);
 
   return { invoke };

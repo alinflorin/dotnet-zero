@@ -3,7 +3,9 @@ using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using Basic.Reference.Assemblies;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.Completion;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.QuickInfo;
 using Microsoft.CodeAnalysis.Text;
 
 namespace engine.Workspace;
@@ -191,6 +193,81 @@ public sealed class ProjectWorkspace
             return new RunResult(false, diagnostics, "", null);
 
         return await ExecuteAsync(assemblyBytes!, diagnostics).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<CompletionItemDto>> GetCompletionsAsync(string fileId, string content, int position, string? triggerCharacter)
+    {
+        var document = TransientDocument(fileId, content);
+        var completionService = CompletionService.GetService(document);
+        if (completionService is null) return [];
+
+        var trigger = triggerCharacter is { Length: > 0 }
+            ? CompletionTrigger.CreateInsertionTrigger(triggerCharacter[0])
+            : CompletionTrigger.Invoke;
+
+        var completions = await completionService.GetCompletionsAsync(document, position, trigger).ConfigureAwait(false);
+        return completions.ItemsList
+            .Select(item => new CompletionItemDto(item.DisplayText, item.Tags.FirstOrDefault() ?? "Text", item.DisplayText))
+            .ToList();
+    }
+
+    public async Task<HoverDto?> GetHoverAsync(string fileId, string content, int position)
+    {
+        var document = TransientDocument(fileId, content);
+        var quickInfoService = QuickInfoService.GetService(document);
+        if (quickInfoService is null) return null;
+
+        var quickInfo = await quickInfoService.GetQuickInfoAsync(document, position).ConfigureAwait(false);
+        if (quickInfo is null) return null;
+
+        var markdown = string.Join(
+            "\n\n",
+            quickInfo.Sections
+                .Select(section => string.Concat(section.TaggedParts.Select(part => part.Text)))
+                .Where(text => !string.IsNullOrWhiteSpace(text)));
+
+        if (string.IsNullOrWhiteSpace(markdown)) return null;
+
+        var text = await document.GetTextAsync().ConfigureAwait(false);
+        var (startLine, startColumn, endLine, endColumn) = ToRange(text, quickInfo.Span);
+        return new HoverDto(markdown, startLine, startColumn, endLine, endColumn);
+    }
+
+    public async Task<IReadOnlyList<LiveDiagnostic>> GetLiveDiagnosticsAsync(string fileId, string content)
+    {
+        var document = TransientDocument(fileId, content);
+        var model = await document.GetSemanticModelAsync().ConfigureAwait(false);
+        if (model is null) return [];
+
+        var text = await document.GetTextAsync().ConfigureAwait(false);
+        return model.GetDiagnostics()
+            .Where(d => d.Severity != DiagnosticSeverity.Hidden)
+            .Select(d =>
+            {
+                var (startLine, startColumn, endLine, endColumn) = ToRange(text, d.Location.SourceSpan);
+                return new LiveDiagnostic(d.Severity.ToString().ToLowerInvariant(), d.GetMessage(), startLine, startColumn, endLine, endColumn);
+            })
+            .ToList();
+    }
+
+    /// <summary>
+    /// Projects unsaved editor content onto the current solution without mutating workspace
+    /// state, so language queries always see what's on screen rather than the last debounced
+    /// <see cref="UpdateFileContent"/> sync.
+    /// </summary>
+    private Document TransientDocument(string fileId, string content)
+    {
+        EnsureProject();
+        var docId = ResolveFileId(fileId);
+        var solution = _workspace!.CurrentSolution.WithDocumentText(docId, SourceText.From(content));
+        return solution.GetDocument(docId)!;
+    }
+
+    private static (int StartLine, int StartColumn, int EndLine, int EndColumn) ToRange(SourceText text, TextSpan span)
+    {
+        var start = text.Lines.GetLinePosition(span.Start);
+        var end = text.Lines.GetLinePosition(span.End);
+        return (start.Line + 1, start.Character + 1, end.Line + 1, end.Character + 1);
     }
 
     private async Task<(bool Success, IReadOnlyList<CompileDiagnostic> Diagnostics, byte[]? AssemblyBytes)> EmitAsync()

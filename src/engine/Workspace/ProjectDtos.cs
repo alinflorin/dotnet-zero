@@ -13,3 +13,9 @@ public sealed record CompileDiagnostic(string Severity, string Message, string? 
 public sealed record CompileResult(bool Success, IReadOnlyList<CompileDiagnostic> Diagnostics);
 
 public sealed record RunResult(bool Success, IReadOnlyList<CompileDiagnostic> Diagnostics, string Output, string? ExceptionMessage);
+
+public sealed record CompletionItemDto(string Label, string Kind, string InsertText);
+
+public sealed record HoverDto(string MarkdownText, int StartLine, int StartColumn, int EndLine, int EndColumn);
+
+public sealed record LiveDiagnostic(string Severity, string Message, int StartLine, int StartColumn, int EndLine, int EndColumn);
