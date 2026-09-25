@@ -43,7 +43,13 @@ public sealed record CompileResult(bool Success, IReadOnlyList<CompileDiagnostic
 
 public sealed record RunResult(bool Success, IReadOnlyList<CompileDiagnostic> Diagnostics, string Output, string? ExceptionMessage);
 
-public sealed record CompletionItemDto(string Label, string Kind, string InsertText);
+public sealed record CompletionItemDto(string Label, string Kind, string InsertText, string SortText);
+
+public sealed record TextEditDto(int StartLine, int StartColumn, int EndLine, int EndColumn, string NewText);
+
+public sealed record CompletionResolveDto(IReadOnlyList<TextEditDto> AdditionalTextEdits);
+
+public sealed record CodeActionDto(string Title, IReadOnlyList<TextEditDto> Edits);
 
 public sealed record HoverDto(string MarkdownText, int StartLine, int StartColumn, int EndLine, int EndColumn);
 

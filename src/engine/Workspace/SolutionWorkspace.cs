@@ -287,6 +287,12 @@ public sealed class SolutionWorkspace
     public Task<IReadOnlyList<LiveDiagnostic>> GetLiveDiagnosticsAsync(string projectId, string fileId, string content) =>
         WithFreshReferenceMetadataAsync(projectId, () => Project(projectId).GetLiveDiagnosticsAsync(fileId, content));
 
+    public Task<CompletionResolveDto?> ResolveCompletionAsync(string projectId, string fileId, string content, int position, string label, string sortText) =>
+        WithFreshReferenceMetadataAsync(projectId, () => Project(projectId).ResolveCompletionAsync(fileId, content, position, label, sortText));
+
+    public Task<IReadOnlyList<CodeActionDto>> GetCodeActionsAsync(string projectId, string fileId, string content, int startOffset, int endOffset) =>
+        WithFreshReferenceMetadataAsync(projectId, () => Project(projectId).GetCodeActionsAsync(fileId, content, startOffset, endOffset));
+
     private async Task<T> WithFreshReferenceMetadataAsync<T>(string projectId, Func<Task<T>> query)
     {
         await EnsureReferenceMetadataFreshAsync(projectId).ConfigureAwait(false);

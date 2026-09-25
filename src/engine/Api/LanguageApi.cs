@@ -20,4 +20,12 @@ public static class LanguageApi
     [JSInvokable]
     public static Task<IReadOnlyList<LiveDiagnostic>> GetLiveDiagnostics(string projectId, string fileId, string content) =>
         ProjectApi.Solution.GetLiveDiagnosticsAsync(projectId, fileId, content);
+
+    [JSInvokable]
+    public static Task<CompletionResolveDto?> ResolveCompletion(string projectId, string fileId, string content, int position, string label, string sortText) =>
+        ProjectApi.Solution.ResolveCompletionAsync(projectId, fileId, content, position, label, sortText);
+
+    [JSInvokable]
+    public static Task<IReadOnlyList<CodeActionDto>> GetCodeActions(string projectId, string fileId, string content, int startOffset, int endOffset) =>
+        ProjectApi.Solution.GetCodeActionsAsync(projectId, fileId, content, startOffset, endOffset);
 }

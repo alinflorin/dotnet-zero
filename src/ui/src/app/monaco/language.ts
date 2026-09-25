@@ -13,6 +13,34 @@ interface CompletionItemDto {
   label: string
   kind: string
   insertText: string
+  sortText: string
+}
+
+interface TextEditDto {
+  startLine: number
+  startColumn: number
+  endLine: number
+  endColumn: number
+  newText: string
+}
+
+interface CompletionResolveDto {
+  additionalTextEdits: TextEditDto[]
+}
+
+interface CodeActionDto {
+  title: string
+  edits: TextEditDto[]
+}
+
+/** Extra fields stashed on a Monaco suggestion at provide-time so resolveCompletionItem can
+ * ask the backend to compute additionalTextEdits (e.g. an added `using`) without needing the
+ * model — Monaco preserves arbitrary properties on the objects it round-trips through resolve. */
+interface ZeroCompletionItem extends monaco.languages.CompletionItem {
+  _zeroProjectId?: string
+  _zeroFileId?: string
+  _zeroContent?: string
+  _zeroPosition?: number
 }
 
 interface HoverDto {
@@ -109,25 +137,61 @@ export function registerCSharpLanguageFeatures() {
       if (!projectId) return { suggestions: [] }
 
       try {
+        const fileId = fileIdOf(model)
+        const content = model.getValue()
+        const offset = model.getOffsetAt(position)
         const items = await invokeDotNet<CompletionItemDto[]>(
           "GetCompletions",
           projectId,
-          fileIdOf(model),
-          model.getValue(),
-          model.getOffsetAt(position),
+          fileId,
+          content,
+          offset,
           context.triggerCharacter ?? null,
         )
         return {
-          suggestions: items.map((item) => ({
-            label: item.label,
-            kind: toCompletionKind(item.kind),
-            insertText: item.insertText,
-            range,
-          })),
+          suggestions: items.map(
+            (item): ZeroCompletionItem => ({
+              label: item.label,
+              kind: toCompletionKind(item.kind),
+              insertText: item.insertText,
+              sortText: item.sortText,
+              range,
+              _zeroProjectId: projectId,
+              _zeroFileId: fileId,
+              _zeroContent: content,
+              _zeroPosition: offset,
+            }),
+          ),
         }
       } catch {
         return { suggestions: [] }
       }
+    },
+    async resolveCompletionItem(item) {
+      const zeroItem = item as ZeroCompletionItem
+      const { _zeroProjectId, _zeroFileId, _zeroContent, _zeroPosition } = zeroItem
+      if (!_zeroProjectId || !_zeroFileId || _zeroContent === undefined || _zeroPosition === undefined) return item
+
+      try {
+        const resolved = await invokeDotNet<CompletionResolveDto | null>(
+          "ResolveCompletion",
+          _zeroProjectId,
+          _zeroFileId,
+          _zeroContent,
+          _zeroPosition,
+          item.label,
+          zeroItem.sortText,
+        )
+        if (resolved && resolved.additionalTextEdits.length > 0) {
+          zeroItem.additionalTextEdits = resolved.additionalTextEdits.map((edit) => ({
+            range: new monaco.Range(edit.startLine, edit.startColumn, edit.endLine, edit.endColumn),
+            text: edit.newText,
+          }))
+        }
+      } catch {
+        // Leave the item as-is — the plain-text insert from provideCompletionItems still applies.
+      }
+      return item
     },
   })
 
@@ -198,6 +262,57 @@ export function registerCSharpLanguageFeatures() {
       }
     },
   })
+
+  monaco.languages.registerCodeActionProvider(
+    CSHARP_LANGUAGE_ID,
+    {
+      async provideCodeActions(model, range, context) {
+        await ensureBlazorReady()
+
+        // context.markers is already scoped by Monaco to markers overlapping `range`; the only
+        // diagnostics source registered is ours (DIAGNOSTICS_OWNER), so any marker here is ours.
+        if (context.markers.length === 0) return { actions: [], dispose: () => {} }
+
+        const projectId = getProjectIdForFile(fileIdOf(model))
+        if (!projectId) return { actions: [], dispose: () => {} }
+
+        try {
+          const startOffset = model.getOffsetAt({ lineNumber: range.startLineNumber, column: range.startColumn })
+          const endOffset = model.getOffsetAt({ lineNumber: range.endLineNumber, column: range.endColumn })
+          const codeActions = await invokeDotNet<CodeActionDto[]>(
+            "GetCodeActions",
+            projectId,
+            fileIdOf(model),
+            model.getValue(),
+            startOffset,
+            endOffset,
+          )
+
+          return {
+            actions: codeActions.map((action) => ({
+              title: action.title,
+              kind: "quickfix",
+              isPreferred: true,
+              edit: {
+                edits: action.edits.map((edit) => ({
+                  resource: model.uri,
+                  textEdit: {
+                    range: new monaco.Range(edit.startLine, edit.startColumn, edit.endLine, edit.endColumn),
+                    text: edit.newText,
+                  },
+                  versionId: model.getVersionId(),
+                })),
+              },
+            })),
+            dispose: () => {},
+          }
+        } catch {
+          return { actions: [], dispose: () => {} }
+        }
+      },
+    },
+    { providedCodeActionKinds: ["quickfix"] },
+  )
 
   const diagnosticsTimers = new Map<string, ReturnType<typeof setTimeout>>()
 

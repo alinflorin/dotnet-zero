@@ -419,12 +419,61 @@ public sealed class ProjectWorkspace
 
                 var completions = await completionService.GetCompletionsAsync(document, position, trigger, cancellationToken: cancellationToken).ConfigureAwait(false);
                 return completions.ItemsList
-                    .Select(item => new CompletionItemDto(item.DisplayText, item.Tags.FirstOrDefault() ?? "Text", item.DisplayText))
+                    .Select(item => new CompletionItemDto(item.DisplayText, item.Tags.FirstOrDefault() ?? "Text", item.DisplayText, item.SortText))
                     .ToList();
             }
             catch (OperationCanceledException)
             {
                 return [];
+            }
+        }, cancellationToken);
+    }
+
+    /// <summary>Lazily computes the extra text edits (e.g. an added <c>using</c> directive) for a
+    /// completion item the user actually committed. Deferred out of <see cref="GetCompletionsAsync"/>
+    /// because <see cref="CompletionService.GetChangeAsync"/> is comparatively expensive and only the
+    /// one committed item needs it — the same "resolve" split LSP completion uses.</summary>
+    public Task<CompletionResolveDto?> ResolveCompletionAsync(string fileId, string content, int position, string label, string sortText)
+    {
+        var cancellationToken = BeginRequest($"resolve:{fileId}");
+        var document = TransientDocument(fileId, content);
+
+        return Task.Run<CompletionResolveDto?>(async () =>
+        {
+            try
+            {
+                var completionService = CompletionService.GetService(document);
+                if (completionService is null) return null;
+
+                var completions = await completionService.GetCompletionsAsync(
+                    document, position, CompletionTrigger.Invoke, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+                var item = completions.ItemsList.FirstOrDefault(i => i.DisplayText == label && i.SortText == sortText);
+                if (item is null) return null;
+
+                var change = await completionService.GetChangeAsync(document, item, cancellationToken: cancellationToken).ConfigureAwait(false);
+                if (change.TextChanges.IsDefaultOrEmpty) return null;
+
+                var text = await document.GetTextAsync(cancellationToken).ConfigureAwait(false);
+
+                // The change Roslyn computes for an import-completion item bundles the primary
+                // edit (replacing the typed prefix at the cursor) together with the added `using`.
+                // Monaco already applies the primary edit itself via insertText/range, so only the
+                // remaining edits (the `using` insertion) are surfaced here as additionalTextEdits.
+                var additional = change.TextChanges
+                    .Where(tc => !(tc.Span.Start <= position && position <= tc.Span.End))
+                    .Select(tc =>
+                    {
+                        var (startLine, startColumn, endLine, endColumn) = ToRange(text, tc.Span);
+                        return new TextEditDto(startLine, startColumn, endLine, endColumn, tc.NewText ?? "");
+                    })
+                    .ToList();
+
+                return additional.Count == 0 ? null : new CompletionResolveDto(additional);
+            }
+            catch (OperationCanceledException)
+            {
+                return null;
             }
         }, cancellationToken);
     }
@@ -624,6 +673,72 @@ public sealed class ProjectWorkspace
                         return new LiveDiagnostic(d.Severity.ToString().ToLowerInvariant(), d.GetMessage(), startLine, startColumn, endLine, endColumn);
                     })
                     .ToList();
+            }
+            catch (OperationCanceledException)
+            {
+                return [];
+            }
+        }, cancellationToken);
+    }
+
+    /// <summary>Hand-rolled "add using" quick fix — Roslyn's own <c>CSharpAddImportCodeFixProvider</c> is
+    /// internal and only reachable through MEF/<c>ICodeFixService</c> host composition this workspace
+    /// doesn't have, so this resolves candidates directly via <see cref="Compilation.GetSymbolsWithName"/>
+    /// (the same "go straight to the public compiler API" approach <see cref="GetSignatureHelpAsync"/> uses).</summary>
+    public Task<IReadOnlyList<CodeActionDto>> GetCodeActionsAsync(string fileId, string content, int startOffset, int endOffset)
+    {
+        var cancellationToken = BeginRequest($"codeactions:{fileId}");
+        var document = TransientDocument(fileId, content);
+
+        return Task.Run<IReadOnlyList<CodeActionDto>>(async () =>
+        {
+            try
+            {
+                var model = await document.GetSemanticModelAsync(cancellationToken).ConfigureAwait(false);
+                if (model is null) return [];
+
+                var text = await document.GetTextAsync(cancellationToken).ConfigureAwait(false);
+                var requestSpan = TextSpan.FromBounds(startOffset, endOffset);
+
+                var diagnostic = model.GetDiagnostics(cancellationToken: cancellationToken)
+                    .FirstOrDefault(d => d.Id == "CS0246" && d.Location.SourceSpan.OverlapsWith(requestSpan));
+                if (diagnostic is null) return [];
+
+                var identifier = text.ToString(diagnostic.Location.SourceSpan);
+                // Strip a trailing "<...>"/"[]" that CS0246's span sometimes includes for generic/array uses.
+                var genericMarker = identifier.IndexOfAny(['<', '[']);
+                if (genericMarker >= 0) identifier = identifier[..genericMarker];
+                if (string.IsNullOrWhiteSpace(identifier)) return [];
+
+                var compilation = await document.Project.GetCompilationAsync(cancellationToken).ConfigureAwait(false);
+                if (compilation is null) return [];
+
+                var syntaxRoot = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false) as CompilationUnitSyntax;
+                var existingUsings = syntaxRoot?.Usings
+                    .Select(u => u.Name?.ToString())
+                    .Where(n => n is not null)
+                    .ToHashSet(StringComparer.Ordinal) ?? [];
+
+                var candidateNamespaces = compilation.GetSymbolsWithName(name => name == identifier, SymbolFilter.Type, cancellationToken)
+                    .Select(symbol => symbol.ContainingNamespace)
+                    .Where(ns => ns is { IsGlobalNamespace: false })
+                    .Select(ns => ns!.ToDisplayString())
+                    .Distinct(StringComparer.Ordinal)
+                    .Where(ns => !existingUsings.Contains(ns))
+                    .OrderBy(ns => ns, StringComparer.Ordinal)
+                    .Take(5)
+                    .ToList();
+
+                if (candidateNamespaces.Count == 0) return [];
+
+                var insertOffset = syntaxRoot?.Usings.Count > 0 ? syntaxRoot.Usings[^1].FullSpan.End : 0;
+                var (insertLine, insertColumn, _, _) = ToRange(text, new TextSpan(insertOffset, 0));
+
+                return candidateNamespaces
+                    .Select(ns => new CodeActionDto(
+                        $"using {ns};",
+                        [new TextEditDto(insertLine, insertColumn, insertLine, insertColumn, $"using {ns};\n")]))
+                    .ToList<CodeActionDto>();
             }
             catch (OperationCanceledException)
             {
