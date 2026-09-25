@@ -79,17 +79,7 @@ function useIsMobile() {
 export function Shell() {
   const styles = useStyles()
   const { t } = useTranslation()
-  const {
-    compileProject,
-    runStartupProject,
-    cleanProject,
-    selectedProjectId,
-    startupProjectId,
-    addProject,
-    createSolution,
-    newSolutionInFolder,
-    openSolutionFromFolder,
-  } = useProject()
+  const { compileProject, runStartupProject, cleanProject, selectedProjectId, startupProjectId } = useProject()
   const targetProjectId = selectedProjectId ?? startupProjectId
   const { appendLine, clear, panelOpen, showChannel, togglePanel } = useLog()
   const { startDebug } = useDebug()
@@ -171,25 +161,6 @@ export function Shell() {
     appendLine("output", t("run.cleaned"))
   }, [isBusy, targetProjectId, cleanProject, appendLine, showChannel, t])
 
-  const handleNewProject = useCallback(() => {
-    const name = window.prompt(t("sidebar.projectNamePlaceholder"))
-    if (name?.trim()) void addProject(name.trim())
-  }, [addProject, t])
-
-  const handleNewSolution = useCallback(() => {
-    const name = window.prompt(t("solution.newSolutionNamePlaceholder"))
-    if (name?.trim()) void createSolution(name.trim())
-  }, [createSolution, t])
-
-  const handleNewSolutionInFolder = useCallback(() => {
-    const name = window.prompt(t("solution.newSolutionNamePlaceholder"))
-    if (name?.trim()) void newSolutionInFolder(name.trim())
-  }, [newSolutionInFolder, t])
-
-  const handleOpenSolutionFromFolder = useCallback(() => {
-    void openSolutionFromFolder()
-  }, [openSolutionFromFolder])
-
   const sidebarPane = useResizablePane({
     axis: "horizontal",
     initialSize: DEFAULT_SIDEBAR_WIDTH,
@@ -228,10 +199,6 @@ export function Shell() {
         onRun={handleRun}
         onDebug={handleDebug}
         onClean={handleClean}
-        onNewProject={handleNewProject}
-        onNewSolution={handleNewSolution}
-        onNewSolutionInFolder={handleNewSolutionInFolder}
-        onOpenSolutionFromFolder={handleOpenSolutionFromFolder}
         isBusy={isBusy}
       />
       <div className={styles.main}>

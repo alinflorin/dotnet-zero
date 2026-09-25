@@ -34,6 +34,8 @@ import { useTranslation } from "react-i18next"
 import { useProject } from "../../app/project/project-context"
 import { isFileSystemAccessSupported } from "../../app/project/diskSync"
 import { ProjectNode } from "./ProjectNode"
+import { NamePromptDialog } from "../common/NamePromptDialog"
+import { ConfirmDialog } from "../common/ConfirmDialog"
 
 const fsAccessSupported = isFileSystemAccessSupported()
 
@@ -94,8 +96,11 @@ export function ExplorerPanel() {
   const project = useProject()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [addProjectOpen, setAddProjectOpen] = useState(false)
-  const [projectName, setProjectName] = useState("MyProject")
+  const [projectName, setProjectName] = useState("NewSolution1")
   const [newProjectName, setNewProjectName] = useState("Project2")
+  const [newSolutionInFolderOpen, setNewSolutionInFolderOpen] = useState(false)
+  const [newSolutionOpen, setNewSolutionOpen] = useState(false)
+  const [closeConfirmOpen, setCloseConfirmOpen] = useState(false)
 
   if (project.status === "loading") {
     return <Spinner size="small" label={t("sidebar.loading")} />
@@ -109,7 +114,7 @@ export function ExplorerPanel() {
           <Dialog open={dialogOpen} onOpenChange={(_, data) => setDialogOpen(data.open)}>
             <DialogTrigger disableButtonEnhancement>
               <Button appearance="primary" size="small">
-                {t("sidebar.newProject")}
+                {t("solution.newSolution")}
               </Button>
             </DialogTrigger>
             <DialogSurface>
@@ -123,13 +128,13 @@ export function ExplorerPanel() {
                 }}
               >
                 <DialogBody>
-                  <DialogTitle>{t("sidebar.newProject")}</DialogTitle>
+                  <DialogTitle>{t("solution.newSolution")}</DialogTitle>
                   <DialogContent>
                     <Input
                       autoFocus
                       value={projectName}
                       onChange={(_, data) => setProjectName(data.value)}
-                      placeholder={t("sidebar.projectNamePlaceholder")}
+                      placeholder={t("solution.newSolutionNamePlaceholder")}
                     />
                   </DialogContent>
                   <DialogActions>
@@ -146,14 +151,7 @@ export function ExplorerPanel() {
           </Dialog>
           {fsAccessSupported ? (
             <>
-              <Button
-                appearance="secondary"
-                size="small"
-                onClick={() => {
-                  const name = window.prompt(t("solution.newSolutionNamePlaceholder"))
-                  if (name?.trim()) void project.newSolutionInFolder(name.trim())
-                }}
-              >
+              <Button appearance="secondary" size="small" onClick={() => setNewSolutionInFolderOpen(true)}>
                 {t("solution.newSolutionInFolder")}
               </Button>
               <Button appearance="secondary" size="small" onClick={() => void project.openSolutionFromFolder()}>
@@ -168,6 +166,14 @@ export function ExplorerPanel() {
             </Tooltip>
           )}
         </div>
+        <NamePromptDialog
+          open={newSolutionInFolderOpen}
+          onOpenChange={setNewSolutionInFolderOpen}
+          title={t("solution.newSolutionInFolder")}
+          placeholder={t("solution.newSolutionNamePlaceholder")}
+          confirmLabel={t("common.create")}
+          onSubmit={(name) => void project.newSolutionInFolder(name)}
+        />
       </div>
     )
   }
@@ -204,6 +210,9 @@ export function ExplorerPanel() {
                 <MenuItem icon={<AddRegular />} onClick={() => setAddProjectOpen(true)}>
                   {t("solution.newProject")}
                 </MenuItem>
+                <MenuItem icon={<AddRegular />} onClick={() => setNewSolutionOpen(true)}>
+                  {t("solution.newSolution")}
+                </MenuItem>
                 <MenuItem icon={<ArrowDownloadRegular />} onClick={() => void project.exportSlnx()}>
                   {t("solution.exportSlnx")}
                 </MenuItem>
@@ -212,13 +221,7 @@ export function ExplorerPanel() {
                 </MenuItem>
                 {fsAccessSupported && (
                   <>
-                    <MenuItem
-                      icon={<FolderAddRegular />}
-                      onClick={() => {
-                        const name = window.prompt(t("solution.newSolutionNamePlaceholder"))
-                        if (name?.trim()) void project.newSolutionInFolder(name.trim())
-                      }}
-                    >
+                    <MenuItem icon={<FolderAddRegular />} onClick={() => setNewSolutionInFolderOpen(true)}>
                       {t("solution.newSolutionInFolder")}
                     </MenuItem>
                     <MenuItem icon={<FolderOpenRegular />} onClick={() => void project.openSolutionFromFolder()}>
@@ -236,12 +239,7 @@ export function ExplorerPanel() {
                     {t("solution.reconnectFolder", { name: project.linkedFolderName })}
                   </MenuItem>
                 )}
-                <MenuItem
-                  icon={<DismissCircleRegular />}
-                  onClick={() => {
-                    if (window.confirm(t("solution.closeConfirm"))) void project.closeSolution()
-                  }}
-                >
+                <MenuItem icon={<DismissCircleRegular />} onClick={() => setCloseConfirmOpen(true)}>
                   {t("solution.close")}
                 </MenuItem>
               </MenuList>
@@ -287,6 +285,30 @@ export function ExplorerPanel() {
           </form>
         </DialogSurface>
       </Dialog>
+      <NamePromptDialog
+        open={newSolutionInFolderOpen}
+        onOpenChange={setNewSolutionInFolderOpen}
+        title={t("solution.newSolutionInFolder")}
+        placeholder={t("solution.newSolutionNamePlaceholder")}
+        confirmLabel={t("common.create")}
+        onSubmit={(name) => void project.newSolutionInFolder(name)}
+      />
+      <NamePromptDialog
+        open={newSolutionOpen}
+        onOpenChange={setNewSolutionOpen}
+        title={t("solution.newSolution")}
+        placeholder={t("solution.newSolutionNamePlaceholder")}
+        confirmLabel={t("common.create")}
+        onSubmit={(name) => void project.createSolution(name)}
+      />
+      <ConfirmDialog
+        open={closeConfirmOpen}
+        onOpenChange={setCloseConfirmOpen}
+        title={t("solution.close")}
+        message={t("solution.closeConfirm")}
+        confirmLabel={t("solution.close")}
+        onConfirm={() => void project.closeSolution()}
+      />
     </div>
   )
 }

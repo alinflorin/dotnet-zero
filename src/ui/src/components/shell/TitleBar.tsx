@@ -1,15 +1,4 @@
-import {
-  makeStyles,
-  tokens,
-  Text,
-  Button,
-  Spinner,
-  Menu,
-  MenuTrigger,
-  MenuPopover,
-  MenuList,
-  MenuItem,
-} from "@fluentui/react-components"
+import { makeStyles, tokens, Text, Button, Spinner } from "@fluentui/react-components"
 import {
   NavigationRegular,
   WrenchRegular,
@@ -20,24 +9,14 @@ import {
   BroomFilled,
   BugRegular,
   BugFilled,
-  AddRegular,
-  ArrowDownloadRegular,
-  FolderAddRegular,
-  FolderOpenRegular,
-  FolderSyncRegular,
-  PlugDisconnectedRegular,
   bundleIcon,
 } from "@fluentui/react-icons"
 import { useTranslation } from "react-i18next"
-import { useProject } from "../../app/project/project-context"
-import { isFileSystemAccessSupported } from "../../app/project/diskSync"
 
 const Wrench = bundleIcon(WrenchFilled, WrenchRegular)
 const Play = bundleIcon(PlayFilled, PlayRegular)
 const Broom = bundleIcon(BroomFilled, BroomRegular)
 const Bug = bundleIcon(BugFilled, BugRegular)
-
-const fsAccessSupported = isFileSystemAccessSupported()
 
 const useStyles = makeStyles({
   root: {
@@ -61,11 +40,6 @@ const useStyles = makeStyles({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ["-webkit-app-region" as any]: "no-drag",
   },
-  menuButton: {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ["-webkit-app-region" as any]: "no-drag",
-    fontSize: tokens.fontSizeBase200,
-  },
   cleanButton: {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ["-webkit-app-region" as any]: "no-drag",
@@ -86,10 +60,6 @@ interface TitleBarProps {
   onRun?: () => void
   onDebug?: () => void
   onClean?: () => void
-  onNewProject?: () => void
-  onNewSolution?: () => void
-  onNewSolutionInFolder?: () => void
-  onOpenSolutionFromFolder?: () => void
   isBusy?: boolean
 }
 
@@ -100,15 +70,10 @@ export function TitleBar({
   onRun,
   onDebug,
   onClean,
-  onNewProject,
-  onNewSolution,
-  onNewSolutionInFolder,
-  onOpenSolutionFromFolder,
   isBusy,
 }: TitleBarProps) {
   const styles = useStyles()
   const { t } = useTranslation()
-  const project = useProject()
 
   return (
     <div className={styles.root}>
@@ -124,51 +89,6 @@ export function TitleBar({
         />
       )}
       <Text className={styles.title}>{t("app.title")}</Text>
-      {project.projects.length > 0 && (
-        <Menu>
-          <MenuTrigger disableButtonEnhancement>
-            <Button appearance="transparent" size="small" className={styles.menuButton}>
-              {t("project.menu")}
-            </Button>
-          </MenuTrigger>
-          <MenuPopover>
-            <MenuList>
-              <MenuItem icon={<AddRegular />} onClick={onNewProject}>
-                {t("solution.newProject")}
-              </MenuItem>
-              <MenuItem icon={<AddRegular />} onClick={onNewSolution}>
-                {t("solution.newSolution")}
-              </MenuItem>
-              <MenuItem icon={<ArrowDownloadRegular />} onClick={() => void project.exportSlnx()}>
-                {t("solution.exportSlnx")}
-              </MenuItem>
-              <MenuItem icon={<ArrowDownloadRegular />} onClick={() => void project.exportZip()}>
-                {t("solution.exportZip")}
-              </MenuItem>
-              {fsAccessSupported && (
-                <>
-                  <MenuItem icon={<FolderAddRegular />} onClick={onNewSolutionInFolder}>
-                    {t("solution.newSolutionInFolder")}
-                  </MenuItem>
-                  <MenuItem icon={<FolderOpenRegular />} onClick={onOpenSolutionFromFolder}>
-                    {t("solution.openFromFolder")}
-                  </MenuItem>
-                </>
-              )}
-              {project.folderLinkStatus === "linked" && (
-                <MenuItem icon={<PlugDisconnectedRegular />} onClick={() => void project.unlinkFolder()}>
-                  {t("solution.unlinkFolder", { name: project.linkedFolderName })}
-                </MenuItem>
-              )}
-              {project.folderLinkStatus === "permission-needed" && (
-                <MenuItem icon={<FolderSyncRegular />} onClick={() => void project.reconnectFolder()}>
-                  {t("solution.reconnectFolder", { name: project.linkedFolderName })}
-                </MenuItem>
-              )}
-            </MenuList>
-          </MenuPopover>
-        </Menu>
-      )}
       <div className={styles.spacer} />
       {isBusy && <Spinner size="tiny" />}
       {onCompile && (

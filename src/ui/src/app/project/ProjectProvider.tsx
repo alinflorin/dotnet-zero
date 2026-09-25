@@ -442,11 +442,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
   const exportZip = useCallback(async () => {
     await flushSync()
-    // Blazor JS interop serializes a byte[] return value as a base64 string.
-    const base64 = await invoke<string>("ExportZip")
-    const binary = atob(base64)
-    const bytes = new Uint8Array(binary.length)
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+    // Blazor JS interop marshals a byte[] return value directly as a Uint8Array.
+    const bytes = await invoke<Uint8Array>("ExportZip")
     const blob = new Blob([bytes], { type: "application/zip" })
     const url = URL.createObjectURL(blob)
     const anchor = document.createElement("a")

@@ -37,6 +37,7 @@ import type { ProjectDto } from "../../app/project/types"
 import { FileTree } from "./FileTree"
 import { DependenciesTree } from "./DependenciesTree"
 import { AddReferenceDialog } from "./AddReferenceDialog"
+import { ConfirmDialog } from "../common/ConfirmDialog"
 
 const ProjectIcon = bundleIcon(AppsListDetailFilled, AppsListDetailRegular)
 
@@ -109,6 +110,7 @@ export const ProjectNode = memo(function ProjectNode({ project: p }: ProjectNode
   const [hovered, setHovered] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const [referenceDialogOpen, setReferenceDialogOpen] = useState(false)
+  const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false)
 
   const isStartup = project.startupProjectId === p.id
   const isSelected = project.explorerSelection?.projectId === p.id && project.explorerSelection.entryId === null
@@ -123,10 +125,8 @@ export const ProjectNode = memo(function ProjectNode({ project: p }: ProjectNode
   const otherProjects = project.projects.filter((other) => other.id !== p.id)
 
   const handleRemove = useCallback(() => {
-    if (window.confirm(t("project.removeConfirm", { name: p.name }))) {
-      void project.removeProject(p.id)
-    }
-  }, [project, p.id, p.name, t])
+    setRemoveConfirmOpen(true)
+  }, [])
 
   const handleBuild = useCallback(async () => {
     showChannel("output")
@@ -272,6 +272,14 @@ export const ProjectNode = memo(function ProjectNode({ project: p }: ProjectNode
         otherProjects={otherProjects}
         currentReferenceIds={referencedIds}
         onSave={(ids) => void project.setProjectReferences(p.id, ids)}
+      />
+      <ConfirmDialog
+        open={removeConfirmOpen}
+        onOpenChange={setRemoveConfirmOpen}
+        title={t("project.remove")}
+        message={t("project.removeConfirm", { name: p.name })}
+        confirmLabel={t("common.remove")}
+        onConfirm={() => void project.removeProject(p.id)}
       />
     </div>
   )
