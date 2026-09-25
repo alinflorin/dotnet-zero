@@ -41,6 +41,7 @@
   "run.succeeded": "Build succeeded.",
   "run.finished": "Program finished.",
   "run.cleaned": "Cleaned cached build output.",
+  "debug.start": "Start Debugging",
   "debug.continue": "Continue",
   "debug.stepOver": "Step Over",
   "debug.stepInto": "Step Into",

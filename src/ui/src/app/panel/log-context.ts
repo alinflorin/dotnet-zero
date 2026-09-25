@@ -13,6 +13,11 @@ export interface LogContextValue {
   lines: LogLine[]
   appendLine: (channel: LogChannel, text: string) => void
   clear: (channel?: LogChannel) => void
+  activeChannel: LogChannel
+  panelOpen: boolean
+  showChannel: (channel: LogChannel) => void
+  togglePanel: () => void
+  closePanel: () => void
 }
 
 export const LogContext = createContext<LogContextValue | undefined>(undefined)

@@ -1,4 +1,3 @@
-import { useState } from "react"
 import { makeStyles, tokens, mergeClasses, Button } from "@fluentui/react-components"
 import { DismissRegular } from "@fluentui/react-icons"
 import { useTranslation } from "react-i18next"
@@ -77,7 +76,6 @@ interface PanelProps {
   height: number
   onResizeStart: (event: React.PointerEvent<HTMLDivElement>) => void
   resizing: boolean
-  onClose: () => void
 }
 
 const CHANNELS: { id: LogChannel; labelKey: string }[] = [
@@ -85,13 +83,12 @@ const CHANNELS: { id: LogChannel; labelKey: string }[] = [
   { id: "debug", labelKey: "panel.debugConsole" },
 ]
 
-export function Panel({ height, onResizeStart, resizing, onClose }: PanelProps) {
+export function Panel({ height, onResizeStart, resizing }: PanelProps) {
   const styles = useStyles()
   const { t } = useTranslation()
-  const { lines } = useLog()
-  const [active, setActive] = useState<LogChannel>("output")
+  const { lines, activeChannel, showChannel, closePanel } = useLog()
 
-  const visibleLines = lines.filter((line) => line.channel === active)
+  const visibleLines = lines.filter((line) => line.channel === activeChannel)
 
   return (
     <div className={styles.root} style={{ height: `${height}px` }}>
@@ -105,9 +102,9 @@ export function Panel({ height, onResizeStart, resizing, onClose }: PanelProps) 
             <div
               key={channel.id}
               role="tab"
-              aria-selected={active === channel.id}
-              className={mergeClasses(styles.tab, active === channel.id && styles.tabActive)}
-              onClick={() => setActive(channel.id)}
+              aria-selected={activeChannel === channel.id}
+              className={mergeClasses(styles.tab, activeChannel === channel.id && styles.tabActive)}
+              onClick={() => showChannel(channel.id)}
             >
               {t(channel.labelKey)}
             </div>
@@ -119,7 +116,7 @@ export function Panel({ height, onResizeStart, resizing, onClose }: PanelProps) 
           icon={<DismissRegular />}
           aria-label={t("panel.close")}
           title={t("panel.close")}
-          onClick={onClose}
+          onClick={closePanel}
         />
       </div>
       <div className={styles.body}>

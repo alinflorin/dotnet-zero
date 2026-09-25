@@ -41,6 +41,7 @@
   "run.succeeded": "Compilare reușită.",
   "run.finished": "Programul s-a încheiat.",
   "run.cleaned": "Rezultatul compilării anterioare a fost șters.",
+  "debug.start": "Pornește depanarea",
   "debug.continue": "Continuă",
   "debug.stepOver": "Peste",
   "debug.stepInto": "Intră",

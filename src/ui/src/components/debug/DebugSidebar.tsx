@@ -12,9 +12,11 @@ import {
   StopFilled,
   bundleIcon,
 } from "@fluentui/react-icons"
+import { useCallback } from "react"
 import { useTranslation } from "react-i18next"
 import { useDebug } from "../../app/debug/debug-context"
 import { useProject } from "../../app/project/project-context"
+import { useLog } from "../../app/panel/log-context"
 
 const Play = bundleIcon(PlayFilled, PlayRegular)
 const StepOver = bundleIcon(ArrowStepOverFilled, ArrowStepOverRegular)
@@ -72,8 +74,9 @@ const useStyles = makeStyles({
 export function DebugSidebar() {
   const styles = useStyles()
   const { t } = useTranslation()
-  const { status, callStack, continue_, stepOver, stepInto, stepOut, stop } = useDebug()
+  const { status, callStack, startDebug, continue_, stepOver, stepInto, stepOut, stop } = useDebug()
   const { openFiles, setActiveFile } = useProject()
+  const { appendLine, clear, showChannel } = useLog()
 
   const jumpToFrame = (fileId: string) => {
     if (openFiles.some((f) => f.id === fileId)) setActiveFile(fileId)
@@ -81,11 +84,34 @@ export function DebugSidebar() {
 
   const paused = status === "paused"
   const active = status === "running" || status === "starting" || status === "paused"
+  const canStart = status === "idle" || status === "stopped"
+
+  const handlePlay = useCallback(async () => {
+    if (paused) {
+      continue_()
+      return
+    }
+    if (!canStart) return
+    showChannel("debug")
+    clear("debug")
+    try {
+      await startDebug()
+    } catch (error) {
+      appendLine("debug", String(error))
+    }
+  }, [paused, canStart, continue_, startDebug, appendLine, clear, showChannel])
 
   return (
     <div className={styles.root}>
       <div className={styles.toolbar}>
-        <Button appearance="subtle" size="small" icon={<Play />} disabled={!paused} onClick={continue_} title={t("debug.continue")} />
+        <Button
+          appearance="subtle"
+          size="small"
+          icon={<Play />}
+          disabled={!paused && !canStart}
+          onClick={handlePlay}
+          title={paused ? t("debug.continue") : t("debug.start")}
+        />
         <Button appearance="subtle" size="small" icon={<StepOver />} disabled={!paused} onClick={stepOver} title={t("debug.stepOver")} />
         <Button appearance="subtle" size="small" icon={<StepInto />} disabled={!paused} onClick={stepInto} title={t("debug.stepInto")} />
         <Button appearance="subtle" size="small" icon={<StepOut />} disabled={!paused} onClick={stepOut} title={t("debug.stepOut")} />

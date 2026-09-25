@@ -80,18 +80,17 @@ export function Shell() {
   const styles = useStyles()
   const { t } = useTranslation()
   const { compileProject, runProject, compileAndRunProject, cleanProject } = useProject()
-  const { appendLine, clear } = useLog()
+  const { appendLine, clear, panelOpen, showChannel, togglePanel } = useLog()
   const { startDebug } = useDebug()
   const [activeView, setActiveView] = useState<ActivityView>("explorer")
   const isMobile = useIsMobile()
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [panelOpen, setPanelOpen] = useState(false)
   const [isBusy, setIsBusy] = useState(false)
 
   const handleCompile = useCallback(async () => {
     if (isBusy) return
     setIsBusy(true)
-    setPanelOpen(true)
+    showChannel("output")
     clear("output")
     appendLine("output", t("run.compiling"))
     try {
@@ -106,7 +105,7 @@ export function Shell() {
     } finally {
       setIsBusy(false)
     }
-  }, [isBusy, compileProject, appendLine, clear, t])
+  }, [isBusy, compileProject, appendLine, clear, showChannel, t])
 
   const reportRunResult = useCallback(
     (result: RunResult) => {
@@ -130,7 +129,7 @@ export function Shell() {
   const handleRun = useCallback(async () => {
     if (isBusy) return
     setIsBusy(true)
-    setPanelOpen(true)
+    showChannel("output")
     clear("output")
     appendLine("output", t("run.compiling"))
     try {
@@ -140,12 +139,12 @@ export function Shell() {
     } finally {
       setIsBusy(false)
     }
-  }, [isBusy, runProject, reportRunResult, appendLine, clear, t])
+  }, [isBusy, runProject, reportRunResult, appendLine, clear, showChannel, t])
 
   const handleCompileAndRun = useCallback(async () => {
     if (isBusy) return
     setIsBusy(true)
-    setPanelOpen(true)
+    showChannel("output")
     clear("output")
     appendLine("output", t("run.compiling"))
     try {
@@ -155,26 +154,26 @@ export function Shell() {
     } finally {
       setIsBusy(false)
     }
-  }, [isBusy, compileAndRunProject, reportRunResult, appendLine, clear, t])
+  }, [isBusy, compileAndRunProject, reportRunResult, appendLine, clear, showChannel, t])
 
   const handleDebug = useCallback(async () => {
     if (isBusy) return
     setActiveView("debug")
-    setPanelOpen(true)
+    showChannel("debug")
     clear("debug")
     try {
       await startDebug()
     } catch (error) {
       appendLine("debug", String(error))
     }
-  }, [isBusy, startDebug, appendLine, clear])
+  }, [isBusy, startDebug, appendLine, clear, showChannel])
 
   const handleClean = useCallback(async () => {
     if (isBusy) return
     await cleanProject()
-    setPanelOpen(true)
+    showChannel("output")
     appendLine("output", t("run.cleaned"))
-  }, [isBusy, cleanProject, appendLine, t])
+  }, [isBusy, cleanProject, appendLine, showChannel, t])
 
   const sidebarPane = useResizablePane({
     axis: "horizontal",
@@ -203,10 +202,6 @@ export function Shell() {
 
   const handleToggleSidebar = useCallback(() => {
     setSidebarOpen((open) => !open)
-  }, [])
-
-  const handleTogglePanel = useCallback(() => {
-    setPanelOpen((open) => !open)
   }, [])
 
   return (
@@ -244,15 +239,10 @@ export function Shell() {
           <EditorArea />
         </div>
         {panelOpen && (
-          <Panel
-            height={panelPane.size}
-            onResizeStart={panelPane.handleResizeStart}
-            resizing={panelPane.resizing}
-            onClose={() => setPanelOpen(false)}
-          />
+          <Panel height={panelPane.size} onResizeStart={panelPane.handleResizeStart} resizing={panelPane.resizing} />
         )}
       </div>
-      <StatusBar panelOpen={panelOpen} onTogglePanel={handleTogglePanel} />
+      <StatusBar panelOpen={panelOpen} onTogglePanel={togglePanel} />
     </div>
   )
 }
