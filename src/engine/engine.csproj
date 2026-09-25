@@ -6,9 +6,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <OverrideHtmlAssetPlaceholders>true</OverrideHtmlAssetPlaceholders>
     <CompressionEnabled>false</CompressionEnabled>
-    <StaticWebAssetFingerprintingEnabled>false</StaticWebAssetFingerprintingEnabled>
-    <WasmFingerprintAssets>false</WasmFingerprintAssets>
-    <BlazorFingerprintBlazorJs>false</BlazorFingerprintBlazorJs>
     <WasmEnableHotReload>false</WasmEnableHotReload>
     <!--
       Runs language-service work (completions/hover/diagnostics) on background WASM

@@ -11,7 +11,9 @@
   <body>
     <div id="root"></div>
     <div style="display: none;" id="app"></div>
-    <script src="/engine/_framework/blazor.webassembly.js" autostart="false"></script>
+    <!-- The blazor.webassembly.<hash>.js script tag is injected by the blazorScriptTag
+         Vite plugin (vite.config.ts), which resolves the current fingerprinted filename
+         from public/engine/_framework at request/build time. -->
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
