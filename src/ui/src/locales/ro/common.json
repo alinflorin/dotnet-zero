@@ -51,5 +51,13 @@
   "debug.notRunning": "Setează un breakpoint și apasă Depanează pentru a începe.",
   "debug.starting": "Se pornește…",
   "common.cancel": "Anulează",
-  "common.create": "Creează"
+  "common.create": "Creează",
+  "pwa.install.title": "Instalează Zero",
+  "pwa.install.description": "Zero este complet salvat în cache și poate rula offline. Instalează-l ca aplicație pentru acces mai rapid și afișare pe tot ecranul.",
+  "pwa.install.confirm": "Instalează",
+  "pwa.install.dismiss": "Nu acum",
+  "pwa.update.title": "Actualizare disponibilă",
+  "pwa.update.description": "O versiune nouă a Zero a fost descărcată. Reîncarcă pentru a o folosi.",
+  "pwa.update.confirm": "Reîncarcă",
+  "pwa.update.dismiss": "Mai târziu"
 }

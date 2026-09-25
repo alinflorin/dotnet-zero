@@ -135,7 +135,7 @@ export default defineConfig({
     crossOriginIsolation(),
     blazorScriptTag(),
     VitePWA({
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
       includeAssets: ['favicon.svg', 'favicon.png', 'apple-touch-icon.png'],
       manifest: {
         name: 'Zero',

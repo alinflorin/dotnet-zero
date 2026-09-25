@@ -4,13 +4,15 @@ import { ProjectProvider } from "./app/project/ProjectProvider"
 import { LogProvider } from "./app/panel/LogProvider"
 import { DebugProvider } from "./app/debug/DebugProvider"
 import { Shell } from "./components/shell/Shell"
+import { PwaPrompt } from "./app/pwa/PwaPrompt"
 import { ensureBlazorReady } from "./app/blazor/blazorReady"
 import "./app/i18n/i18n"
 
 function App() {
   useEffect(() => {
     void ensureBlazorReady()
-  }, [])
+    console.log('test');
+  }, []);
 
   return (
     <ThemeProvider>
@@ -18,6 +20,7 @@ function App() {
         <LogProvider>
           <DebugProvider>
             <Shell />
+            <PwaPrompt />
           </DebugProvider>
         </LogProvider>
       </ProjectProvider>

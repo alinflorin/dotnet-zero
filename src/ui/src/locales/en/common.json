@@ -51,5 +51,13 @@
   "debug.notRunning": "Set a breakpoint and click Debug to start a session.",
   "debug.starting": "Starting…",
   "common.cancel": "Cancel",
-  "common.create": "Create"
+  "common.create": "Create",
+  "pwa.install.title": "Install Zero",
+  "pwa.install.description": "Zero is fully cached and ready to run offline. Install it as an app for quicker access and a full-screen experience.",
+  "pwa.install.confirm": "Install",
+  "pwa.install.dismiss": "Not now",
+  "pwa.update.title": "Update available",
+  "pwa.update.description": "A new version of Zero has been downloaded. Reload to start using it.",
+  "pwa.update.confirm": "Reload",
+  "pwa.update.dismiss": "Later"
 }
