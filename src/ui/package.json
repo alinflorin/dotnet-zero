@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "cert": "mkdir -p .certs && CAROOT=\"$(command /usr/local/bin/mkcert -CAROOT 2>/dev/null || command mkcert -CAROOT)\" && mkcert create-cert --ca-cert \"$CAROOT/rootCA.pem\" --ca-key \"$CAROOT/rootCA-key.pem\" --cert .certs/localhost.pem --key .certs/localhost-key.pem --domains localhost 127.0.0.1 ::1",
+    "serve:https": "npm run build && npm run cert && serve dist --ssl-cert .certs/localhost.pem --ssl-key .certs/localhost-key.pem -l 8443"
   },
   "dependencies": {
     "@fluentui/react-components": "^9.74.9",
@@ -35,6 +37,8 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.6",
     "globals": "^17.12.0",
+    "mkcert": "^3.2.0",
+    "serve": "^14.2.6",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.69.0",
     "vite": "^8.3.0",
