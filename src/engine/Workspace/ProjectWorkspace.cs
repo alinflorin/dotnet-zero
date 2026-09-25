@@ -700,8 +700,11 @@ public sealed class ProjectWorkspace
                 var text = await document.GetTextAsync(cancellationToken).ConfigureAwait(false);
                 var requestSpan = TextSpan.FromBounds(startOffset, endOffset);
 
+                // IntersectsWith (not OverlapsWith) — Monaco sends a zero-length range when the
+                // request comes from a cursor click rather than a selection, and TextSpan.OverlapsWith
+                // always returns false for a zero-length span even when it falls inside another span.
                 var diagnostic = model.GetDiagnostics(cancellationToken: cancellationToken)
-                    .FirstOrDefault(d => d.Id == "CS0246" && d.Location.SourceSpan.OverlapsWith(requestSpan));
+                    .FirstOrDefault(d => d.Id == "CS0246" && d.Location.SourceSpan.IntersectsWith(requestSpan));
                 if (diagnostic is null) return [];
 
                 var identifier = text.ToString(diagnostic.Location.SourceSpan);
