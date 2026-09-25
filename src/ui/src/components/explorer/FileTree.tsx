@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { memo, useCallback, useMemo, useState } from "react"
 import {
   Tree,
   TreeItem,
@@ -99,40 +99,46 @@ export function FileTree({
   // pendingCreate is a one-shot request from outside the tree (e.g. the toolbar above it). It is
   // folded into the local editing state on render rather than mirrored via an effect, and consumed
   // (cleared upstream) as soon as it has been picked up.
-  const activeEditing: EditingState =
-    editing ??
-    (pendingCreate
-      ? { mode: pendingCreate.mode === "file" ? "create-file" : "create-folder", parentPath: pendingCreate.parentPath }
-      : null)
+  const activeEditing: EditingState = useMemo(
+    () =>
+      editing ??
+      (pendingCreate
+        ? { mode: pendingCreate.mode === "file" ? "create-file" : "create-folder", parentPath: pendingCreate.parentPath }
+        : null),
+    [editing, pendingCreate],
+  )
   const effectiveOpenItems =
     pendingCreate?.parentPath && !openItems.has(pendingCreate.parentPath)
       ? new Set(openItems).add(pendingCreate.parentPath)
       : openItems
 
-  const handleOpenChange = (_event: TreeItemOpenChangeEvent, data: TreeItemOpenChangeData) => {
+  const handleOpenChange = useCallback((_event: TreeItemOpenChangeEvent, data: TreeItemOpenChangeData) => {
     setOpenItems((prev) => {
       const next = new Set(prev)
       if (data.open) next.add(String(data.value))
       else next.delete(String(data.value))
       return next
     })
-  }
+  }, [])
 
-  const commitEdit = (name: string) => {
-    const trimmed = name.trim()
-    if (trimmed) {
-      if (activeEditing?.mode === "create-file") onAddFile(activeEditing.parentPath, trimmed)
-      else if (activeEditing?.mode === "create-folder") onAddFolder(activeEditing.parentPath, trimmed)
-      else if (activeEditing?.mode === "rename") onRename(activeEditing.id, trimmed)
-    }
+  const commitEdit = useCallback(
+    (name: string) => {
+      const trimmed = name.trim()
+      if (trimmed) {
+        if (activeEditing?.mode === "create-file") onAddFile(activeEditing.parentPath, trimmed)
+        else if (activeEditing?.mode === "create-folder") onAddFolder(activeEditing.parentPath, trimmed)
+        else if (activeEditing?.mode === "rename") onRename(activeEditing.id, trimmed)
+      }
+      setEditing(null)
+      onConsumePendingCreate()
+    },
+    [activeEditing, onAddFile, onAddFolder, onRename, onConsumePendingCreate],
+  )
+
+  const cancelEdit = useCallback(() => {
     setEditing(null)
     onConsumePendingCreate()
-  }
-
-  const cancelEdit = () => {
-    setEditing(null)
-    onConsumePendingCreate()
-  }
+  }, [onConsumePendingCreate])
 
   const editingRow = activeEditing && (
     <EditRow
@@ -218,7 +224,7 @@ interface FileTreeNodeProps {
   cancelEdit: () => void
 }
 
-function FileTreeNode({
+const FileTreeNode = memo(function FileTreeNode({
   node,
   parentId,
   selectedId,
@@ -371,4 +377,4 @@ function FileTreeNode({
       </Tree>
     </TreeItem>
   )
-}
+})

@@ -15,7 +15,7 @@ import {
 import { useCallback } from "react"
 import { useTranslation } from "react-i18next"
 import { useDebug } from "../../app/debug/debug-context"
-import { useProject } from "../../app/project/project-context"
+import { useEditorActions, useEditorState } from "../../app/project/project-context"
 import { useLog } from "../../app/panel/log-context"
 
 const Play = bundleIcon(PlayFilled, PlayRegular)
@@ -75,7 +75,8 @@ export function DebugSidebar() {
   const styles = useStyles()
   const { t } = useTranslation()
   const { status, callStack, startDebug, continue_, stepOver, stepInto, stepOut, stop } = useDebug()
-  const { openFiles, setActiveFile } = useProject()
+  const { openFiles } = useEditorState()
+  const { setActiveFile } = useEditorActions()
   const { appendLine, clear, showChannel } = useLog()
 
   const jumpToFrame = (fileId: string) => {

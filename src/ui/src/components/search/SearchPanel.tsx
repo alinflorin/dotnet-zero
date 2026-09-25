@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { makeStyles, tokens, Text, Input, Spinner, Button } from "@fluentui/react-components"
 import { SearchRegular, DocumentRegular, DismissRegular } from "@fluentui/react-icons"
 import { useTranslation } from "react-i18next"
-import { useProject } from "../../app/project/project-context"
+import { useEditorActions, useProject } from "../../app/project/project-context"
 import { useDotNet } from "../../hooks/useDotNet"
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback"
 import type { ProjectFileNode } from "../../app/project/types"
@@ -132,6 +132,7 @@ export function SearchPanel() {
   const styles = useStyles()
   const { t } = useTranslation()
   const project = useProject()
+  const { openFile } = useEditorActions()
   const { invoke } = useDotNet()
 
   const [query, setQuery] = useState("")
@@ -259,7 +260,7 @@ export function SearchPanel() {
                   <div
                     key={match.lineNumber}
                     className={styles.matchRow}
-                    onClick={() => void project.openFile(file.projectId, file.node)}
+                    onClick={() => void openFile(file.projectId, file.node)}
                   >
                     <span className={styles.lineNumber}>{match.lineNumber}</span>
                     <span className={styles.snippet}>

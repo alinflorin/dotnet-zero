@@ -48,9 +48,6 @@ export interface ProjectContextValue {
   selectedProjectId: string | null
   explorerSelection: ExplorerSelection | null
   pendingCreate: PendingCreate | null
-  openFiles: OpenFile[]
-  activeFileId: string | null
-  dirtyFileIds: ReadonlySet<string>
   folderLinkStatus: FolderLinkStatus
   linkedFolderName: string | null
   createSolution: (name: string) => Promise<void>
@@ -70,10 +67,6 @@ export interface ProjectContextValue {
   setProjectReferences: (projectId: string, referencedProjectIds: string[]) => Promise<void>
   exportSlnx: () => Promise<void>
   exportZip: () => Promise<void>
-  openFile: (projectId: string, node: ProjectFileNode) => Promise<void>
-  closeFile: (fileId: string) => void
-  setActiveFile: (fileId: string) => void
-  updateFileContent: (fileId: string, content: string) => void
   addFile: (projectId: string, parentPath: string | undefined, name: string) => Promise<void>
   addFolder: (projectId: string, parentPath: string | undefined, name: string) => Promise<void>
   renameEntry: (projectId: string, id: string, newName: string) => Promise<void>
@@ -87,12 +80,49 @@ export interface ProjectContextValue {
   uninstallPackage: (projectId: string, id: string) => Promise<void>
 }
 
+/** Open-tab state: changes on every keystroke in the editor. Kept out of ProjectContextValue so
+ * that typing doesn't re-render the explorer tree, title bar, status bar, search and NuGet panels. */
+export interface EditorStateContextValue {
+  openFiles: OpenFile[]
+  activeFileId: string | null
+  dirtyFileIds: ReadonlySet<string>
+}
+
+/** Editor actions. These callbacks are referentially stable across renders (they read the latest
+ * open-tab state from a ref rather than closing over it), so consuming this context alone never
+ * causes a re-render — safe to use from components like the explorer tree that only need to
+ * trigger `openFile` without caring about open-tab state itself. */
+export interface EditorActionsContextValue {
+  openFile: (projectId: string, node: ProjectFileNode) => Promise<void>
+  closeFile: (fileId: string) => void
+  setActiveFile: (fileId: string) => void
+  updateFileContent: (fileId: string, content: string) => void
+}
+
 export const ProjectContext = createContext<ProjectContextValue | undefined>(undefined)
+export const EditorStateContext = createContext<EditorStateContextValue | undefined>(undefined)
+export const EditorActionsContext = createContext<EditorActionsContextValue | undefined>(undefined)
 
 export function useProject(): ProjectContextValue {
   const context = useContext(ProjectContext)
   if (!context) {
     throw new Error("useProject must be used within a ProjectProvider")
+  }
+  return context
+}
+
+export function useEditorState(): EditorStateContextValue {
+  const context = useContext(EditorStateContext)
+  if (!context) {
+    throw new Error("useEditorState must be used within a ProjectProvider")
+  }
+  return context
+}
+
+export function useEditorActions(): EditorActionsContextValue {
+  const context = useContext(EditorActionsContext)
+  if (!context) {
+    throw new Error("useEditorActions must be used within a ProjectProvider")
   }
   return context
 }

@@ -5,15 +5,20 @@ import {
   RadioGroup,
   Radio,
   Label,
+  Spinner,
   mergeClasses,
 } from "@fluentui/react-components"
+import { Suspense, lazy } from "react"
 import { useTranslation } from "react-i18next"
 import type { ActivityView } from "./ActivityBar"
 import { useThemeMode, type ThemeMode } from "../../app/theme/theme-context"
 import { ExplorerPanel } from "../explorer/ExplorerPanel"
 import { DebugSidebar } from "../debug/DebugSidebar"
-import { NuGetPanel } from "../nuget/NuGetPanel"
-import { SearchPanel } from "../search/SearchPanel"
+
+// These panels aren't needed for the initial paint (only shown once the user switches to their
+// activity-bar view), so they're split into separate chunks to keep the main bundle smaller.
+const NuGetPanel = lazy(() => import("../nuget/NuGetPanel").then((m) => ({ default: m.NuGetPanel })))
+const SearchPanel = lazy(() => import("../search/SearchPanel").then((m) => ({ default: m.SearchPanel })))
 
 const useStyles = makeStyles({
   root: {
@@ -151,9 +156,17 @@ export function SideBar({ view, width, onResizeStart, resizing }: SideBarProps) 
         )}
       >
         {view === "explorer" && <ExplorerPanel />}
-        {view === "search" && <SearchPanel />}
+        {view === "search" && (
+          <Suspense fallback={<Spinner size="small" />}>
+            <SearchPanel />
+          </Suspense>
+        )}
         {view === "debug" && <DebugSidebar />}
-        {view === "extensions" && <NuGetPanel />}
+        {view === "extensions" && (
+          <Suspense fallback={<Spinner size="small" />}>
+            <NuGetPanel />
+          </Suspense>
+        )}
         {view === "settings" && <SettingsPanel />}
       </div>
       {onResizeStart && (

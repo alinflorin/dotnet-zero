@@ -3,6 +3,8 @@ import { useDotNet } from "../../hooks/useDotNet"
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback"
 import { ensureBlazorReady } from "../blazor/blazorReady"
 import {
+  EditorActionsContext,
+  EditorStateContext,
   ProjectContext,
   type ExplorerSelection,
   type FolderLinkStatus,
@@ -535,9 +537,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       selectedProjectId,
       explorerSelection,
       pendingCreate,
-      openFiles: editorState.openFiles,
-      activeFileId: editorState.activeFileId,
-      dirtyFileIds,
       folderLinkStatus,
       linkedFolderName: linkedFolderHandle?.name ?? null,
       createSolution,
@@ -557,10 +556,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       setProjectReferences,
       exportSlnx,
       exportZip,
-      openFile,
-      closeFile,
-      setActiveFile,
-      updateFileContent,
       addFile,
       addFolder,
       renameEntry,
@@ -579,8 +574,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       selectedProjectId,
       explorerSelection,
       pendingCreate,
-      editorState,
-      dirtyFileIds,
       folderLinkStatus,
       linkedFolderHandle,
       createSolution,
@@ -600,10 +593,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       setProjectReferences,
       exportSlnx,
       exportZip,
-      openFile,
-      closeFile,
-      setActiveFile,
-      updateFileContent,
       addFile,
       addFolder,
       renameEntry,
@@ -618,5 +607,30 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     ],
   )
 
-  return <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>
+  // Open-tab state changes on every keystroke; kept in its own context so typing doesn't
+  // re-render the explorer tree, title bar, status bar, search and NuGet panels.
+  const editorStateValue = useMemo(
+    () => ({
+      openFiles: editorState.openFiles,
+      activeFileId: editorState.activeFileId,
+      dirtyFileIds,
+    }),
+    [editorState, dirtyFileIds],
+  )
+
+  // openFile/closeFile/setActiveFile/updateFileContent all read open-tab state from a ref rather
+  // than closing over it, so this object is referentially stable and never triggers a re-render
+  // on its own — safe for components that only need to dispatch an editor action.
+  const editorActionsValue = useMemo(
+    () => ({ openFile, closeFile, setActiveFile, updateFileContent }),
+    [openFile, closeFile, setActiveFile, updateFileContent],
+  )
+
+  return (
+    <ProjectContext.Provider value={value}>
+      <EditorStateContext.Provider value={editorStateValue}>
+        <EditorActionsContext.Provider value={editorActionsValue}>{children}</EditorActionsContext.Provider>
+      </EditorStateContext.Provider>
+    </ProjectContext.Provider>
+  )
 }

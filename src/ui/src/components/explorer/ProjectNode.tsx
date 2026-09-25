@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react"
+import { useState, useCallback, memo } from "react"
 import {
   makeStyles,
   tokens,
@@ -30,7 +30,7 @@ import {
   bundleIcon,
 } from "@fluentui/react-icons"
 import { useTranslation } from "react-i18next"
-import { useProject } from "../../app/project/project-context"
+import { useEditorActions, useProject } from "../../app/project/project-context"
 import { useDebug } from "../../app/debug/debug-context"
 import { useLog } from "../../app/panel/log-context"
 import type { ProjectDto } from "../../app/project/types"
@@ -97,10 +97,11 @@ interface ProjectNodeProps {
   project: ProjectDto
 }
 
-export function ProjectNode({ project: p }: ProjectNodeProps) {
+export const ProjectNode = memo(function ProjectNode({ project: p }: ProjectNodeProps) {
   const styles = useStyles()
   const { t } = useTranslation()
   const project = useProject()
+  const { openFile } = useEditorActions()
   const { startDebug } = useDebug()
   const { appendLine, clear, showChannel } = useLog()
   const [open, setOpen] = useState(true)
@@ -254,7 +255,7 @@ export function ProjectNode({ project: p }: ProjectNodeProps) {
             files={p.files}
             selectedId={project.explorerSelection?.projectId === p.id ? project.explorerSelection.entryId : null}
             pendingCreate={projectPendingCreate}
-            onOpenFile={(node) => void project.openFile(p.id, node)}
+            onOpenFile={(node) => void openFile(p.id, node)}
             onSelectEntry={(id, parentPath) => project.setExplorerSelection({ projectId: p.id, entryId: id, parentPath })}
             onAddFile={(parentPath, name) => void project.addFile(p.id, parentPath, name)}
             onAddFolder={(parentPath, name) => void project.addFolder(p.id, parentPath, name)}
@@ -274,4 +275,4 @@ export function ProjectNode({ project: p }: ProjectNodeProps) {
       />
     </div>
   )
-}
+})

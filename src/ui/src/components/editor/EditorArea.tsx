@@ -4,7 +4,7 @@ import type { editor as MonacoEditor } from "monaco-editor"
 import { makeStyles, tokens, Text } from "@fluentui/react-components"
 import { useTranslation } from "react-i18next"
 import { useThemeMode } from "../../app/theme/theme-context"
-import { useProject } from "../../app/project/project-context"
+import { useEditorActions, useEditorState } from "../../app/project/project-context"
 import { useDebug } from "../../app/debug/debug-context"
 import { CSHARP_LANGUAGE_ID } from "../../app/monaco/setup"
 import { fileIdOf } from "../../app/monaco/fileId"
@@ -44,7 +44,8 @@ export function EditorArea() {
   const styles = useStyles()
   const { t } = useTranslation()
   const { resolvedMode } = useThemeMode()
-  const { openFiles, activeFileId, dirtyFileIds, setActiveFile, closeFile, updateFileContent } = useProject()
+  const { openFiles, activeFileId, dirtyFileIds } = useEditorState()
+  const { setActiveFile, closeFile, updateFileContent } = useEditorActions()
   const { breakpoints, toggleBreakpoint, callStack, status } = useDebug()
 
   const activeFile = openFiles.find((file) => file.id === activeFileId) ?? null
