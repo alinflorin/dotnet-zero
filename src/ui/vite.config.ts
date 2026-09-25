@@ -1,13 +1,34 @@
+import path from 'node:path'
 import react, { reactCompilerPreset } from '@vitejs/plugin-react'
 import babel from '@rolldown/plugin-babel'
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
+
+// The Blazor WASM engine build writes directly into public/engine. Those
+// files sit outside the module graph, so trigger a full reload whenever any
+// of them change instead of relying on Vite's default asset handling.
+function reloadOnEngineChange(): Plugin {
+  const engineDir = path.resolve(import.meta.dirname, 'public/engine')
+
+  return {
+    name: 'reload-on-engine-change',
+    configureServer(server) {
+      server.watcher.add(engineDir)
+      server.watcher.on('all', (event, file) => {
+        if (event !== 'change' && event !== 'add' && event !== 'unlink') return
+        if (!path.resolve(file).startsWith(engineDir + path.sep)) return
+        server.ws.send({ type: 'full-reload' })
+      })
+    },
+  }
+}
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
     react(),
     babel({ presets: [reactCompilerPreset()] }),
+    reloadOnEngineChange(),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'favicon.png', 'apple-touch-icon.png'],
