@@ -107,6 +107,20 @@ function crossOriginIsolation(): Plugin {
 
 // https://vite.dev/config/
 export default defineConfig({
+  build: {
+    rolldownOptions: {
+      output: {
+        manualChunks(id) {
+          // monaco-editor splits into ~100 tiny per-language/worker chunks by
+          // default; bundle it (and @monaco-editor/react) into one chunk
+          // instead so it's a single request/cache entry.
+          if (id.includes('node_modules/monaco-editor') || id.includes('node_modules/@monaco-editor')) {
+            return 'monaco'
+          }
+        },
+      },
+    },
+  },
   optimizeDeps: {
     // monaco-editor ships as hundreds of individual ESM files internally.
     // Without forcing it into the dep pre-bundle, dev mode serves each one
