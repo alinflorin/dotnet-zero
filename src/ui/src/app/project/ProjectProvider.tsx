@@ -200,22 +200,38 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     [invoke],
   )
 
+  // Installing/uninstalling a package rewrites the .csproj's <PackageReference> items on the
+  // engine side. If that file happens to be open in an editor tab already, its in-memory content
+  // was fetched before the rewrite and won't reflect it — refetch so the open tab stays in sync
+  // instead of silently going stale until the user closes and reopens it.
+  const refreshOpenCsprojTab = useCallback(async () => {
+    const csprojFile = editorStateRef.current.openFiles.find((f) => f.name.endsWith(".csproj"))
+    if (!csprojFile) return
+    const content = await invoke<string>("GetFileContent", csprojFile.id)
+    setEditorState((prev) => ({
+      ...prev,
+      openFiles: prev.openFiles.map((f) => (f.id === csprojFile.id ? { ...f, content } : f)),
+    }))
+  }, [invoke])
+
   const installPackage = useCallback(
     async (id: string, version?: string) => {
       const updated = await invoke<ProjectDto>("InstallPackage", id, version ?? null)
       setProject(updated)
+      await refreshOpenCsprojTab()
       await persistSnapshot()
     },
-    [invoke, persistSnapshot],
+    [invoke, persistSnapshot, refreshOpenCsprojTab],
   )
 
   const uninstallPackage = useCallback(
     async (id: string) => {
       const updated = await invoke<ProjectDto>("UninstallPackage", id)
       setProject(updated)
+      await refreshOpenCsprojTab()
       await persistSnapshot()
     },
-    [invoke, persistSnapshot],
+    [invoke, persistSnapshot, refreshOpenCsprojTab],
   )
 
   const value = useMemo(
