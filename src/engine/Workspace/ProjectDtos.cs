@@ -2,11 +2,24 @@ namespace engine.Workspace;
 
 public sealed record ProjectFileNode(string Id, string Name, string Kind, IReadOnlyList<ProjectFileNode>? Children);
 
-public sealed record ProjectDto(string Id, string Name, IReadOnlyList<ProjectFileNode> Files);
+public sealed record ProjectDto(string Id, string Name, IReadOnlyList<ProjectFileNode> Files, IReadOnlyList<InstalledPackageDto> Packages);
 
 public sealed record ProjectFileSnapshot(string Id, string Name, IReadOnlyList<string> Folders, string Content);
 
-public sealed record ProjectSnapshot(string Id, string Name, IReadOnlyList<ProjectFileSnapshot> Files, IReadOnlyList<string> EmptyFolders);
+public sealed record ProjectSnapshot(
+    string Id,
+    string Name,
+    IReadOnlyList<ProjectFileSnapshot> Files,
+    IReadOnlyList<string> EmptyFolders,
+    IReadOnlyList<PackageReferenceSnapshot>? Packages = null);
+
+public sealed record PackageReferenceSnapshot(string Id, string Version);
+
+public sealed record InstalledPackageDto(string Id, string Version, IReadOnlyList<string> AssemblyNames, bool IsDirect);
+
+public sealed record NuGetSearchResultDto(string Id, string Version, string? Description, string? IconUrl, long TotalDownloads, bool Installed);
+
+public sealed record NuGetSearchResponseDto(IReadOnlyList<NuGetSearchResultDto> Results, long TotalHits);
 
 public sealed record CompileDiagnostic(string Severity, string Message, string? FileId, string? FileName, int Line, int Column);
 

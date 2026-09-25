@@ -8,8 +8,8 @@ import {
   BranchFilled,
   BugRegular,
   BugFilled,
-  PuzzlePieceRegular,
-  PuzzlePieceFilled,
+  BoxRegular,
+  BoxFilled,
   SettingsRegular,
   SettingsFilled,
   bundleIcon,
@@ -21,7 +21,7 @@ const Folder = bundleIcon(FolderFilled, FolderRegular)
 const Search = bundleIcon(SearchFilled, SearchRegular)
 const Branch = bundleIcon(BranchFilled, BranchRegular)
 const Bug = bundleIcon(BugFilled, BugRegular)
-const Puzzle = bundleIcon(PuzzlePieceFilled, PuzzlePieceRegular)
+const Box = bundleIcon(BoxFilled, BoxRegular)
 const Settings = bundleIcon(SettingsFilled, SettingsRegular)
 
 export type ActivityView = "explorer" | "search" | "sourceControl" | "debug" | "extensions" | "settings"
@@ -37,7 +37,7 @@ const items: ActivityItem[] = [
   { id: "search", icon: Search, labelKey: "activityBar.search" },
   { id: "sourceControl", icon: Branch, labelKey: "activityBar.sourceControl" },
   { id: "debug", icon: Bug, labelKey: "activityBar.debug" },
-  { id: "extensions", icon: Puzzle, labelKey: "activityBar.extensions" },
+  { id: "extensions", icon: Box, labelKey: "activityBar.nuget" },
 ]
 
 const useStyles = makeStyles({

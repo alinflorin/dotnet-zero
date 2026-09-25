@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react"
-import type { CompileResult, ProjectDto, ProjectFileNode, RunResult } from "./types"
+import type { CompileResult, NuGetSearchResponseDto, ProjectDto, ProjectFileNode, RunResult } from "./types"
 
 export interface OpenFile {
   id: string
@@ -27,6 +27,9 @@ export interface ProjectContextValue {
   compileProject: () => Promise<CompileResult>
   runProject: () => Promise<RunResult>
   cleanProject: () => Promise<void>
+  searchPackages: (query: string, skip: number, take: number) => Promise<NuGetSearchResponseDto>
+  installPackage: (id: string, version?: string) => Promise<void>
+  uninstallPackage: (id: string) => Promise<void>
 }
 
 export const ProjectContext = createContext<ProjectContextValue | undefined>(undefined)

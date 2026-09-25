@@ -11,7 +11,7 @@ public static class ProjectApi
     public static ProjectDto CreateProject(string name) => Workspace.CreateProject(name);
 
     [JSInvokable]
-    public static ProjectDto HydrateProject(ProjectSnapshot snapshot) => Workspace.HydrateProject(snapshot);
+    public static Task<ProjectDto> HydrateProject(ProjectSnapshot snapshot) => Workspace.HydrateProjectAsync(snapshot);
 
     [JSInvokable]
     public static Task<ProjectSnapshot> GetSnapshot() => Workspace.GetSnapshotAsync();

@@ -40,6 +40,9 @@ public sealed class ProjectWorkspace
     private readonly HashSet<string> _emptyFolders = new(StringComparer.Ordinal);
     private readonly HashSet<DocumentId> _hiddenDocumentIds = new();
     private byte[]? _lastCompiledAssembly;
+    private readonly NuGetPackageManager _packageManager = new();
+    private static readonly ImmutableArray<MetadataReference> BaseMetadataReferences =
+        Net100.References.All.Cast<MetadataReference>().ToImmutableArray();
 
     // Language-service calls (completions/hover/diagnostics) run on background threads
     // (see GetCompletionsAsync etc.) and race with each other as the user types/moves the
@@ -75,7 +78,7 @@ public sealed class ProjectWorkspace
         return BuildProjectDto();
     }
 
-    public ProjectDto HydrateProject(ProjectSnapshot snapshot)
+    public async Task<ProjectDto> HydrateProjectAsync(ProjectSnapshot snapshot)
     {
         ResetWorkspace();
         _projectId = snapshot.Id;
@@ -91,6 +94,12 @@ public sealed class ProjectWorkspace
         foreach (var folder in snapshot.EmptyFolders)
             _emptyFolders.Add(folder);
 
+        if (snapshot.Packages is { Count: > 0 } packages)
+        {
+            await _packageManager.RestoreAsync(packages).ConfigureAwait(false);
+            ApplyPackageReferences();
+        }
+
         return BuildProjectDto();
     }
 
@@ -105,7 +114,40 @@ public sealed class ProjectWorkspace
             files.Add(new ProjectFileSnapshot(_fileIdByDocId[document.Id], document.Name, document.Folders.ToList(), text.ToString()));
         }
 
-        return new ProjectSnapshot(_projectId, _projectName!, files, _emptyFolders.ToList());
+        return new ProjectSnapshot(_projectId, _projectName!, files, _emptyFolders.ToList(), _packageManager.DirectPackages);
+    }
+
+    public Task<NuGetSearchResponseDto> SearchPackagesAsync(string query, int skip, int take) =>
+        _packageManager.SearchAsync(query, skip, take);
+
+    public async Task<ProjectDto> InstallPackageAsync(string id, string? version)
+    {
+        EnsureProject();
+        await _packageManager.InstallAsync(id, version).ConfigureAwait(false);
+        ApplyPackageReferences();
+        return BuildProjectDto();
+    }
+
+    public ProjectDto UninstallPackage(string id)
+    {
+        EnsureProject();
+        _packageManager.Uninstall(id);
+        ApplyPackageReferences();
+        return BuildProjectDto();
+    }
+
+    public IReadOnlyList<InstalledPackageDto> GetInstalledPackages()
+    {
+        EnsureProject();
+        return _packageManager.Installed;
+    }
+
+    private void ApplyPackageReferences()
+    {
+        var combined = BaseMetadataReferences.Concat(_packageManager.References).ToImmutableArray();
+        var solution = _workspace!.CurrentSolution.WithProjectMetadataReferences(_roslynProjectId!, combined);
+        _workspace.TryApplyChanges(solution);
+        _lastCompiledAssembly = null;
     }
 
     public IReadOnlyList<ProjectFileNode> GetFileTree()
@@ -562,6 +604,7 @@ public sealed class ProjectWorkspace
         _hiddenDocumentIds.Clear();
         _roslynProjectId = null;
         _lastCompiledAssembly = null;
+        _packageManager.Reset();
     }
 
     private void AddHiddenGlobalUsings()
@@ -737,7 +780,7 @@ public sealed class ProjectWorkspace
         public Dictionary<string, TreeNode> Children { get; } = new(StringComparer.Ordinal);
     }
 
-    private ProjectDto BuildProjectDto() => new(_projectId, _projectName!, BuildTree());
+    private ProjectDto BuildProjectDto() => new(_projectId, _projectName!, BuildTree(), _packageManager.Installed);
 
     private Project CurrentProject() => _workspace!.CurrentSolution.GetProject(_roslynProjectId!)!;
 

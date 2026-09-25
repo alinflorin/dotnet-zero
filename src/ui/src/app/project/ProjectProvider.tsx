@@ -5,7 +5,14 @@ import { ensureBlazorReady } from "../blazor/blazorReady"
 import { ProjectContext, type OpenFile, type ProjectStatus } from "./project-context"
 import { loadProjectSnapshot, saveProjectSnapshot } from "./persistence"
 import { findFirstFile, flattenFiles } from "./treeUtils"
-import type { CompileResult, ProjectDto, ProjectFileNode, ProjectSnapshot, RunResult } from "./types"
+import type {
+  CompileResult,
+  NuGetSearchResponseDto,
+  ProjectDto,
+  ProjectFileNode,
+  ProjectSnapshot,
+  RunResult,
+} from "./types"
 
 const SYNC_DEBOUNCE_MS = 500
 
@@ -188,6 +195,29 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     await invoke<void>("Clean")
   }, [invoke])
 
+  const searchPackages = useCallback(
+    (query: string, skip: number, take: number) => invoke<NuGetSearchResponseDto>("SearchPackages", query, skip, take),
+    [invoke],
+  )
+
+  const installPackage = useCallback(
+    async (id: string, version?: string) => {
+      const updated = await invoke<ProjectDto>("InstallPackage", id, version ?? null)
+      setProject(updated)
+      await persistSnapshot()
+    },
+    [invoke, persistSnapshot],
+  )
+
+  const uninstallPackage = useCallback(
+    async (id: string) => {
+      const updated = await invoke<ProjectDto>("UninstallPackage", id)
+      setProject(updated)
+      await persistSnapshot()
+    },
+    [invoke, persistSnapshot],
+  )
+
   const value = useMemo(
     () => ({
       status,
@@ -207,6 +237,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       compileProject,
       runProject,
       cleanProject,
+      searchPackages,
+      installPackage,
+      uninstallPackage,
     }),
     [
       status,
@@ -225,6 +258,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       compileProject,
       runProject,
       cleanProject,
+      searchPackages,
+      installPackage,
+      uninstallPackage,
     ],
   )
 
