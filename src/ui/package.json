@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "cert": "mkdir -p .certs && CAROOT=\"$(command /usr/local/bin/mkcert -CAROOT 2>/dev/null || command mkcert -CAROOT)\" && mkcert create-cert --ca-cert \"$CAROOT/rootCA.pem\" --ca-key \"$CAROOT/rootCA-key.pem\" --cert .certs/localhost.pem --key .certs/localhost-key.pem --domains localhost 127.0.0.1 ::1",
-    "serve:https": "npm run build && npm run cert && serve dist --ssl-cert .certs/localhost.pem --ssl-key .certs/localhost-key.pem -l 8443"
+    "serve:https": "serve dist --ssl-cert .certs/localhost.pem --ssl-key .certs/localhost-key.pem -l 8443"
   },
   "dependencies": {
     "@fluentui/react-components": "^9.74.9",
