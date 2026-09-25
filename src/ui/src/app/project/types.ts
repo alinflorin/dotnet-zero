@@ -21,19 +21,11 @@ export interface ProjectFileSnapshot {
   content: string
 }
 
-export interface PackageReferenceSnapshot {
-  id: string
-  version: string
-}
-
 export interface ProjectSnapshot {
   id: string
   name: string
   files: ProjectFileSnapshot[]
   emptyFolders: string[]
-  /** Legacy-only: packages now live as <PackageReference> items inside the .csproj file in `files`.
-   *  Kept optional so snapshots saved before that change still migrate on load. */
-  packages?: PackageReferenceSnapshot[]
 }
 
 export interface InstalledPackageDto {

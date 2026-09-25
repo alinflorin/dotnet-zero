@@ -10,8 +10,7 @@ public sealed record ProjectSnapshot(
     string Id,
     string Name,
     IReadOnlyList<ProjectFileSnapshot> Files,
-    IReadOnlyList<string> EmptyFolders,
-    IReadOnlyList<PackageReferenceSnapshot>? Packages = null);
+    IReadOnlyList<string> EmptyFolders);
 
 public sealed record PackageReferenceSnapshot(string Id, string Version);
 

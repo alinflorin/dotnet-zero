@@ -86,12 +86,6 @@ public sealed class NuGetPackageManager
         return new InstalledPackageDto(package.Id, package.Version, package.AssemblyNames, package.IsDirect);
     }
 
-    public async Task RestoreAsync(IReadOnlyList<PackageReferenceSnapshot> packages)
-    {
-        foreach (var package in packages)
-            await InstallCoreAsync(package.Id, package.Version, isDirect: true, dependent: null).ConfigureAwait(false);
-    }
-
     public void Uninstall(string id)
     {
         if (!_installed.TryGetValue(id, out var package)) return;

@@ -133,13 +133,8 @@ public sealed class ProjectWorkspace
         }
         else
         {
-            // Snapshot predates the .csproj feature — synthesize one, restoring any packages
-            // that were tracked the old way (a separate list on the snapshot) if present.
+            // Snapshot predates the .csproj feature — synthesize a blank one.
             InitializeCsproj(snapshot.Name);
-            if (snapshot.Packages is { Count: > 0 } legacyPackages)
-                await _packageManager.RestoreAsync(legacyPackages).ConfigureAwait(false);
-            RegenerateCsprojPackageReferences();
-            ApplyPackageReferences();
         }
 
         return BuildProjectDto();
