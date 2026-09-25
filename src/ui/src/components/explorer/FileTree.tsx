@@ -25,6 +25,7 @@ import {
   DeleteRegular,
 } from "@fluentui/react-icons"
 import { useTranslation } from "react-i18next"
+import type { PendingCreate } from "../../app/project/project-context"
 import type { ProjectFileNode } from "../../app/project/types"
 
 type EditingState =
@@ -38,12 +39,6 @@ const useStyles = makeStyles({
     flexDirection: "column",
     width: "100%",
     fontSize: "12px",
-  },
-  toolbar: {
-    display: "flex",
-    justifyContent: "flex-end",
-    columnGap: tokens.spacingHorizontalXS,
-    paddingBottom: tokens.spacingVerticalXS,
   },
   rowLabel: {
     flexGrow: 1,
@@ -66,22 +61,53 @@ const useStyles = makeStyles({
     flexGrow: 1,
     minWidth: 0,
   },
+  selected: {
+    backgroundColor: tokens.colorNeutralBackground3,
+  },
 })
 
 interface FileTreeProps {
   files: ProjectFileNode[]
+  selectedId: string | null
+  pendingCreate: PendingCreate | null
   onOpenFile: (node: ProjectFileNode) => void
+  onSelectEntry: (id: string, parentPath: string | undefined) => void
   onAddFile: (parentPath: string | undefined, name: string) => void
   onAddFolder: (parentPath: string | undefined, name: string) => void
   onRename: (id: string, newName: string) => void
   onDelete: (id: string) => void
+  onConsumePendingCreate: () => void
 }
 
-export function FileTree({ files, onOpenFile, onAddFile, onAddFolder, onRename, onDelete }: FileTreeProps) {
+export function FileTree({
+  files,
+  selectedId,
+  pendingCreate,
+  onOpenFile,
+  onSelectEntry,
+  onAddFile,
+  onAddFolder,
+  onRename,
+  onDelete,
+  onConsumePendingCreate,
+}: FileTreeProps) {
   const styles = useStyles()
   const { t } = useTranslation()
   const [openItems, setOpenItems] = useState<Set<string>>(new Set())
   const [editing, setEditing] = useState<EditingState>(null)
+
+  // pendingCreate is a one-shot request from outside the tree (e.g. the toolbar above it). It is
+  // folded into the local editing state on render rather than mirrored via an effect, and consumed
+  // (cleared upstream) as soon as it has been picked up.
+  const activeEditing: EditingState =
+    editing ??
+    (pendingCreate
+      ? { mode: pendingCreate.mode === "file" ? "create-file" : "create-folder", parentPath: pendingCreate.parentPath }
+      : null)
+  const effectiveOpenItems =
+    pendingCreate?.parentPath && !openItems.has(pendingCreate.parentPath)
+      ? new Set(openItems).add(pendingCreate.parentPath)
+      : openItems
 
   const handleOpenChange = (_event: TreeItemOpenChangeEvent, data: TreeItemOpenChangeData) => {
     setOpenItems((prev) => {
@@ -94,64 +120,53 @@ export function FileTree({ files, onOpenFile, onAddFile, onAddFolder, onRename, 
 
   const commitEdit = (name: string) => {
     const trimmed = name.trim()
-    if (!trimmed) {
-      setEditing(null)
-      return
+    if (trimmed) {
+      if (activeEditing?.mode === "create-file") onAddFile(activeEditing.parentPath, trimmed)
+      else if (activeEditing?.mode === "create-folder") onAddFolder(activeEditing.parentPath, trimmed)
+      else if (activeEditing?.mode === "rename") onRename(activeEditing.id, trimmed)
     }
-    if (editing?.mode === "create-file") onAddFile(editing.parentPath, trimmed)
-    else if (editing?.mode === "create-folder") onAddFolder(editing.parentPath, trimmed)
-    else if (editing?.mode === "rename") onRename(editing.id, trimmed)
     setEditing(null)
+    onConsumePendingCreate()
   }
 
-  const editingRow = editing && (
+  const cancelEdit = () => {
+    setEditing(null)
+    onConsumePendingCreate()
+  }
+
+  const editingRow = activeEditing && (
     <EditRow
       key="__editing__"
-      initialValue={editing.mode === "rename" ? editing.initialName : ""}
+      initialValue={activeEditing.mode === "rename" ? activeEditing.initialName : ""}
       onCommit={commitEdit}
-      onCancel={() => setEditing(null)}
+      onCancel={cancelEdit}
     />
   )
 
   return (
     <div className={styles.root}>
-      <div className={styles.toolbar}>
-        <Button
-          appearance="subtle"
-          size="small"
-          icon={<AddRegular />}
-          title={t("explorer.newFile")}
-          aria-label={t("explorer.newFile")}
-          onClick={() => setEditing({ mode: "create-file", parentPath: undefined })}
-        />
-        <Button
-          appearance="subtle"
-          size="small"
-          icon={<FolderAddRegular />}
-          title={t("explorer.newFolder")}
-          aria-label={t("explorer.newFolder")}
-          onClick={() => setEditing({ mode: "create-folder", parentPath: undefined })}
-        />
-      </div>
       <Tree
         size="small"
         aria-label={t("sidebar.explorer.title")}
-        openItems={openItems}
+        openItems={effectiveOpenItems}
         onOpenChange={handleOpenChange}
       >
         {files.map((node) => (
           <FileTreeNode
             key={node.id}
             node={node}
-            editing={editing}
+            parentId={undefined}
+            selectedId={selectedId}
+            editing={activeEditing}
             onSetEditing={setEditing}
             onOpenFile={onOpenFile}
+            onSelectEntry={onSelectEntry}
             onDelete={onDelete}
             commitEdit={commitEdit}
-            cancelEdit={() => setEditing(null)}
+            cancelEdit={cancelEdit}
           />
         ))}
-        {editing && editing.mode !== "rename" && editing.parentPath === undefined ? editingRow : null}
+        {activeEditing && activeEditing.mode !== "rename" && activeEditing.parentPath === undefined ? editingRow : null}
       </Tree>
     </div>
   )
@@ -192,15 +207,29 @@ function EditRow({
 
 interface FileTreeNodeProps {
   node: ProjectFileNode
+  parentId: string | undefined
+  selectedId: string | null
   editing: EditingState
   onSetEditing: (state: EditingState) => void
   onOpenFile: (node: ProjectFileNode) => void
+  onSelectEntry: (id: string, parentPath: string | undefined) => void
   onDelete: (id: string) => void
   commitEdit: (name: string) => void
   cancelEdit: () => void
 }
 
-function FileTreeNode({ node, editing, onSetEditing, onOpenFile, onDelete, commitEdit, cancelEdit }: FileTreeNodeProps) {
+function FileTreeNode({
+  node,
+  parentId,
+  selectedId,
+  editing,
+  onSetEditing,
+  onOpenFile,
+  onSelectEntry,
+  onDelete,
+  commitEdit,
+  cancelEdit,
+}: FileTreeNodeProps) {
   const styles = useStyles()
   const { t } = useTranslation()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -287,7 +316,11 @@ function FileTreeNode({ node, editing, onSetEditing, onOpenFile, onDelete, commi
       <TreeItem
         itemType="leaf"
         value={node.id}
-        onClick={() => onOpenFile(node)}
+        className={selectedId === node.id ? styles.selected : undefined}
+        onClick={() => {
+          onSelectEntry(node.id, parentId)
+          onOpenFile(node)
+        }}
         onContextMenu={handleContextMenu}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
@@ -303,6 +336,8 @@ function FileTreeNode({ node, editing, onSetEditing, onOpenFile, onDelete, commi
     <TreeItem
       itemType="branch"
       value={node.id}
+      className={selectedId === node.id ? styles.selected : undefined}
+      onClick={() => onSelectEntry(node.id, node.id)}
       onContextMenu={handleContextMenu}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -315,9 +350,12 @@ function FileTreeNode({ node, editing, onSetEditing, onOpenFile, onDelete, commi
           <FileTreeNode
             key={child.id}
             node={child}
+            parentId={node.id}
+            selectedId={selectedId}
             editing={editing}
             onSetEditing={onSetEditing}
             onOpenFile={onOpenFile}
+            onSelectEntry={onSelectEntry}
             onDelete={onDelete}
             commitEdit={commitEdit}
             cancelEdit={cancelEdit}

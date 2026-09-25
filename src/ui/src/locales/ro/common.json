@@ -18,6 +18,8 @@
   "solution.exportSlnx": "Exportă soluția (.slnx)",
   "solution.newSolutionNamePlaceholder": "Numele soluției",
   "solution.menu": "Acțiuni soluție",
+  "solution.close": "Închide soluția",
+  "solution.closeConfirm": "Închizi soluția curentă? Modificările nesalvate se vor pierde.",
   "project.menu": "Acțiuni proiect",
   "project.setStartup": "Setează ca proiect de pornire",
   "project.startupBadge": "Proiect de pornire",

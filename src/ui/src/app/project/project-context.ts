@@ -17,6 +17,20 @@ export interface OpenFile {
 
 export type ProjectStatus = "loading" | "empty" | "ready"
 
+export interface ExplorerSelection {
+  projectId: string
+  /** Id of the selected file/folder entry, or null when the project root itself is selected. */
+  entryId: string | null
+  /** Where a newly created file/folder should be placed given this selection. */
+  parentPath: string | undefined
+}
+
+export interface PendingCreate {
+  projectId: string
+  parentPath: string | undefined
+  mode: "file" | "folder"
+}
+
 export interface ProjectContextValue {
   status: ProjectStatus
   solutionName: string | null
@@ -24,15 +38,21 @@ export interface ProjectContextValue {
   projectReferences: ProjectReferenceGraph
   startupProjectId: string | null
   selectedProjectId: string | null
+  explorerSelection: ExplorerSelection | null
+  pendingCreate: PendingCreate | null
   openFiles: OpenFile[]
   activeFileId: string | null
   dirtyFileIds: ReadonlySet<string>
   createSolution: (name: string) => Promise<void>
+  closeSolution: () => Promise<void>
   addProject: (name: string) => Promise<void>
   removeProject: (projectId: string) => Promise<void>
   renameProject: (projectId: string, newName: string) => Promise<void>
   setStartupProject: (projectId: string) => Promise<void>
   setSelectedProject: (projectId: string) => void
+  setExplorerSelection: (selection: ExplorerSelection | null) => void
+  startCreate: (mode: "file" | "folder") => void
+  cancelCreate: () => void
   setProjectReferences: (projectId: string, referencedProjectIds: string[]) => Promise<void>
   exportSlnx: () => Promise<void>
   openFile: (projectId: string, node: ProjectFileNode) => Promise<void>

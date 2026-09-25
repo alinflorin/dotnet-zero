@@ -18,6 +18,8 @@
   "solution.exportSlnx": "Export Solution (.slnx)",
   "solution.newSolutionNamePlaceholder": "Solution name",
   "solution.menu": "Solution actions",
+  "solution.close": "Close Solution",
+  "solution.closeConfirm": "Close the current solution? Unsaved changes will be lost.",
   "project.menu": "Project actions",
   "project.setStartup": "Set as Startup Project",
   "project.startupBadge": "Startup Project",

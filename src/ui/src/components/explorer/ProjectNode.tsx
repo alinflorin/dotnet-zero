@@ -57,6 +57,9 @@ const useStyles = makeStyles({
       backgroundColor: tokens.colorNeutralBackground3Hover,
     },
   },
+  headerSelected: {
+    backgroundColor: tokens.colorNeutralBackground3,
+  },
   chevron: {
     flexShrink: 0,
     fontSize: "12px",
@@ -107,6 +110,11 @@ export function ProjectNode({ project: p }: ProjectNodeProps) {
   const [referenceDialogOpen, setReferenceDialogOpen] = useState(false)
 
   const isStartup = project.startupProjectId === p.id
+  const isSelected = project.explorerSelection?.projectId === p.id && project.explorerSelection.entryId === null
+  const projectPendingCreate = project.pendingCreate?.projectId === p.id ? project.pendingCreate : null
+  // A pending create targeting this project should reveal it even if the user had collapsed it.
+  const isOpen = open || projectPendingCreate !== null
+
   const referencedIds = project.projectReferences[p.id] ?? []
   const referencedNames = referencedIds
     .map((id) => project.projects.find((other) => other.id === id)?.name)
@@ -179,8 +187,11 @@ export function ProjectNode({ project: p }: ProjectNodeProps) {
   return (
     <div className={styles.root}>
       <div
-        className={styles.header}
-        onClick={() => setOpen((v) => !v)}
+        className={mergeClasses(styles.header, isSelected && styles.headerSelected)}
+        onClick={() => {
+          project.setExplorerSelection({ projectId: p.id, entryId: null, parentPath: undefined })
+          setOpen((v) => !v)
+        }}
         onContextMenu={(e) => {
           e.preventDefault()
           setMenuOpen(true)
@@ -188,7 +199,7 @@ export function ProjectNode({ project: p }: ProjectNodeProps) {
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
       >
-        {open ? <ChevronDownRegular className={styles.chevron} /> : <ChevronRightRegular className={styles.chevron} />}
+        {isOpen ? <ChevronDownRegular className={styles.chevron} /> : <ChevronRightRegular className={styles.chevron} />}
         <ProjectIcon fontSize={14} />
         <Text className={mergeClasses(styles.name, isStartup && styles.nameStartup)} title={p.name}>
           {p.name}
@@ -237,15 +248,19 @@ export function ProjectNode({ project: p }: ProjectNodeProps) {
           </MenuPopover>
         </Menu>
       </div>
-      {open && (
+      {isOpen && (
         <div className={styles.body}>
           <FileTree
             files={p.files}
+            selectedId={project.explorerSelection?.projectId === p.id ? project.explorerSelection.entryId : null}
+            pendingCreate={projectPendingCreate}
             onOpenFile={(node) => void project.openFile(p.id, node)}
+            onSelectEntry={(id, parentPath) => project.setExplorerSelection({ projectId: p.id, entryId: id, parentPath })}
             onAddFile={(parentPath, name) => void project.addFile(p.id, parentPath, name)}
             onAddFolder={(parentPath, name) => void project.addFolder(p.id, parentPath, name)}
             onRename={(id, newName) => void project.renameEntry(p.id, id, newName)}
             onDelete={(id) => void project.deleteEntry(p.id, id)}
+            onConsumePendingCreate={project.cancelCreate}
           />
           <DependenciesTree project={p} referencedProjectNames={referencedNames} />
         </div>

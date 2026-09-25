@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useDotNet } from "../../hooks/useDotNet"
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback"
 import { ensureBlazorReady } from "../blazor/blazorReady"
-import { ProjectContext, type OpenFile, type ProjectStatus } from "./project-context"
-import { loadSolutionSnapshot, saveSolutionSnapshot } from "./persistence"
+import { ProjectContext, type ExplorerSelection, type OpenFile, type PendingCreate, type ProjectStatus } from "./project-context"
+import { clearSolutionSnapshot, loadSolutionSnapshot, saveSolutionSnapshot } from "./persistence"
 import { setFileProjectRegistry } from "./fileProjectRegistry"
 import { findFirstFile, flattenFiles } from "./treeUtils"
 import type {
@@ -38,6 +38,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<ProjectStatus>("loading")
   const [solution, setSolution] = useState<SolutionDto | null>(null)
   const [selectedProjectId, setSelectedProjectIdState] = useState<string | null>(null)
+  const [explorerSelection, setExplorerSelectionState] = useState<ExplorerSelection | null>(null)
+  const [pendingCreate, setPendingCreate] = useState<PendingCreate | null>(null)
   const [editorState, setEditorState] = useState<EditorState>(EMPTY_EDITOR_STATE)
   const [dirtyFileIds, setDirtyFileIds] = useState<ReadonlySet<string>>(new Set())
 
@@ -50,6 +52,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     setSolution(next)
     setFileProjectRegistry(buildFileProjectMap(next.projects))
     setSelectedProjectIdState((prev) => (prev && next.projects.some((p) => p.id === prev) ? prev : next.startupProjectId))
+    setExplorerSelectionState((prev) => (prev && next.projects.some((p) => p.id === prev.projectId) ? prev : null))
+    setPendingCreate((prev) => (prev && next.projects.some((p) => p.id === prev.projectId) ? prev : null))
 
     const fileMap = new Map<string, ProjectFileNode>()
     for (const project of next.projects) for (const [id, node] of flattenFiles(project.files)) fileMap.set(id, node)
@@ -131,6 +135,18 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     [invoke, applySolution, persistSnapshot, openFile],
   )
 
+  const closeSolution = useCallback(async () => {
+    await clearSolutionSnapshot()
+    setSolution(null)
+    setFileProjectRegistry(new Map())
+    setSelectedProjectIdState(null)
+    setExplorerSelectionState(null)
+    setPendingCreate(null)
+    setEditorState(EMPTY_EDITOR_STATE)
+    setDirtyFileIds(new Set())
+    setStatus("empty")
+  }, [])
+
   const addProject = useCallback(
     async (name: string) => {
       const updated = await invoke<SolutionDto>("AddProject", name)
@@ -177,6 +193,24 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
   const setSelectedProject = useCallback((projectId: string) => {
     setSelectedProjectIdState(projectId)
+  }, [])
+
+  const setExplorerSelection = useCallback((selection: ExplorerSelection | null) => {
+    setExplorerSelectionState(selection)
+  }, [])
+
+  const startCreate = useCallback(
+    (mode: "file" | "folder") => {
+      const projectId = explorerSelection?.projectId ?? selectedProjectId ?? solution?.startupProjectId ?? solution?.projects[0]?.id
+      if (!projectId) return
+      const parentPath = explorerSelection?.projectId === projectId ? explorerSelection.parentPath : undefined
+      setPendingCreate({ projectId, parentPath, mode })
+    },
+    [explorerSelection, selectedProjectId, solution],
+  )
+
+  const cancelCreate = useCallback(() => {
+    setPendingCreate(null)
   }, [])
 
   const setProjectReferences = useCallback(
@@ -381,15 +415,21 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       projectReferences: solution?.projectReferences ?? {},
       startupProjectId: solution?.startupProjectId ?? null,
       selectedProjectId,
+      explorerSelection,
+      pendingCreate,
       openFiles: editorState.openFiles,
       activeFileId: editorState.activeFileId,
       dirtyFileIds,
       createSolution,
+      closeSolution,
       addProject,
       removeProject,
       renameProject,
       setStartupProject,
       setSelectedProject,
+      setExplorerSelection,
+      startCreate,
+      cancelCreate,
       setProjectReferences,
       exportSlnx,
       openFile,
@@ -412,14 +452,20 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       status,
       solution,
       selectedProjectId,
+      explorerSelection,
+      pendingCreate,
       editorState,
       dirtyFileIds,
       createSolution,
+      closeSolution,
       addProject,
       removeProject,
       renameProject,
       setStartupProject,
       setSelectedProject,
+      setExplorerSelection,
+      startCreate,
+      cancelCreate,
       setProjectReferences,
       exportSlnx,
       openFile,

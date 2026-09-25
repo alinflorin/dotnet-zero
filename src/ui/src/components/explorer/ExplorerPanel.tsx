@@ -20,7 +20,13 @@ import {
   MenuList,
   MenuItem,
 } from "@fluentui/react-components"
-import { AddRegular, ArrowDownloadRegular, MoreHorizontalRegular } from "@fluentui/react-icons"
+import {
+  AddRegular,
+  ArrowDownloadRegular,
+  DismissCircleRegular,
+  FolderAddRegular,
+  MoreHorizontalRegular,
+} from "@fluentui/react-icons"
 import { useTranslation } from "react-i18next"
 import { useProject } from "../../app/project/project-context"
 import { ProjectNode } from "./ProjectNode"
@@ -64,6 +70,10 @@ const useStyles = makeStyles({
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
     fontSize: "12px",
+  },
+  toolbar: {
+    display: "flex",
+    columnGap: tokens.spacingHorizontalXXS,
   },
   projects: {
     display: "flex",
@@ -144,21 +154,47 @@ export function ExplorerPanel() {
         <Text className={styles.solutionName} title={project.solutionName ?? ""}>
           {t("solution.title", { name: project.solutionName })}
         </Text>
-        <Menu>
-          <MenuTrigger disableButtonEnhancement>
-            <Button appearance="subtle" size="small" icon={<MoreHorizontalRegular />} aria-label={t("solution.menu")} />
-          </MenuTrigger>
-          <MenuPopover>
-            <MenuList>
-              <MenuItem icon={<AddRegular />} onClick={() => setAddProjectOpen(true)}>
-                {t("solution.newProject")}
-              </MenuItem>
-              <MenuItem icon={<ArrowDownloadRegular />} onClick={() => void project.exportSlnx()}>
-                {t("solution.exportSlnx")}
-              </MenuItem>
-            </MenuList>
-          </MenuPopover>
-        </Menu>
+        <div className={styles.toolbar}>
+          <Button
+            appearance="subtle"
+            size="small"
+            icon={<AddRegular />}
+            title={t("explorer.newFile")}
+            aria-label={t("explorer.newFile")}
+            onClick={() => project.startCreate("file")}
+          />
+          <Button
+            appearance="subtle"
+            size="small"
+            icon={<FolderAddRegular />}
+            title={t("explorer.newFolder")}
+            aria-label={t("explorer.newFolder")}
+            onClick={() => project.startCreate("folder")}
+          />
+          <Menu>
+            <MenuTrigger disableButtonEnhancement>
+              <Button appearance="subtle" size="small" icon={<MoreHorizontalRegular />} aria-label={t("solution.menu")} />
+            </MenuTrigger>
+            <MenuPopover>
+              <MenuList>
+                <MenuItem icon={<AddRegular />} onClick={() => setAddProjectOpen(true)}>
+                  {t("solution.newProject")}
+                </MenuItem>
+                <MenuItem icon={<ArrowDownloadRegular />} onClick={() => void project.exportSlnx()}>
+                  {t("solution.exportSlnx")}
+                </MenuItem>
+                <MenuItem
+                  icon={<DismissCircleRegular />}
+                  onClick={() => {
+                    if (window.confirm(t("solution.closeConfirm"))) void project.closeSolution()
+                  }}
+                >
+                  {t("solution.close")}
+                </MenuItem>
+              </MenuList>
+            </MenuPopover>
+          </Menu>
+        </div>
       </div>
       <div className={styles.projects}>
         {project.projects.map((p) => (
