@@ -13,6 +13,10 @@ import { EditorTabs, type EditorFile } from "./EditorTabs"
 const BREAKPOINT_GLYPH_CLASS = "zero-breakpoint-glyph"
 const CURRENT_LINE_CLASS = "zero-debug-current-line"
 
+function languageForFileName(name: string): string {
+  return name.endsWith(".csproj") ? "xml" : CSHARP_LANGUAGE_ID
+}
+
 const useStyles = makeStyles({
   root: {
     display: "flex",
@@ -67,7 +71,7 @@ export function EditorArea() {
   const tabs: EditorFile[] = openFiles.map((file) => ({
     id: file.id,
     name: file.name,
-    language: CSHARP_LANGUAGE_ID,
+    language: languageForFileName(file.name),
     isDirty: dirtyFileIds.has(file.id),
   }))
 
@@ -128,7 +132,7 @@ export function EditorArea() {
         <div className={styles.editorHost}>
           <Editor
             path={activeFile.id}
-            defaultLanguage={CSHARP_LANGUAGE_ID}
+            defaultLanguage={languageForFileName(activeFile.name)}
             value={activeFile.content}
             onChange={(value) => updateFileContent(activeFile.id, value ?? "")}
             onMount={handleMount}

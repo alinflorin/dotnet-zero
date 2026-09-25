@@ -29,7 +29,7 @@ public static class ProjectApi
     public static IReadOnlyList<ProjectFileNode> AddFolder(string? parentPath, string name) => Workspace.AddFolder(parentPath, name);
 
     [JSInvokable]
-    public static void UpdateFileContent(string fileId, string content) => Workspace.UpdateFileContent(fileId, content);
+    public static Task UpdateFileContent(string fileId, string content) => Workspace.UpdateFileContent(fileId, content);
 
     [JSInvokable]
     public static IReadOnlyList<ProjectFileNode> RenameEntry(string id, string newName) => Workspace.RenameEntry(id, newName);

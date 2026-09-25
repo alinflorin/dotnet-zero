@@ -31,6 +31,18 @@ public sealed class ProjectWorkspace
         "global using System.Threading;\n" +
         "global using System.Threading.Tasks;\n";
 
+    private const string CsprojTemplate =
+        "<Project Sdk=\"Microsoft.NET.Sdk\">\n" +
+        "\n" +
+        "  <PropertyGroup>\n" +
+        "    <OutputType>Exe</OutputType>\n" +
+        "    <TargetFramework>net10.0</TargetFramework>\n" +
+        "    <ImplicitUsings>enable</ImplicitUsings>\n" +
+        "    <Nullable>enable</Nullable>\n" +
+        "  </PropertyGroup>\n" +
+        "\n" +
+        "</Project>\n";
+
     private AdhocWorkspace? _workspace;
     private ProjectId? _roslynProjectId;
     private string _projectId = "";
@@ -43,6 +55,14 @@ public sealed class ProjectWorkspace
     private readonly NuGetPackageManager _packageManager = new();
     private static readonly ImmutableArray<MetadataReference> BaseMetadataReferences =
         Net100.References.All.Cast<MetadataReference>().ToImmutableArray();
+
+    // The .csproj is real XML the user can view/edit, but it isn't a Roslyn document — feeding
+    // it into the AdhocWorkspace's C# project would make the compiler try to parse XML as C#.
+    // It's tracked as a side channel instead, with NuGet installs as the source of truth for
+    // <PackageReference> content and the reverse sync (edit csproj by hand) parsed back out.
+    private string _csprojFileId = "";
+    private string _csprojFileName = "";
+    private string _csprojContent = "";
 
     // Language-service calls (completions/hover/diagnostics) run on background threads
     // (see GetCompletionsAsync etc.) and race with each other as the user types/moves the
@@ -74,6 +94,7 @@ public sealed class ProjectWorkspace
         _workspace!.AddProject(BuildProjectInfo(_roslynProjectId, name));
         AddHiddenGlobalUsings();
         AddFileCore(Array.Empty<string>(), "Program.cs", DefaultProgramContent);
+        InitializeCsproj(name);
 
         return BuildProjectDto();
     }
@@ -88,15 +109,36 @@ public sealed class ProjectWorkspace
         _workspace!.AddProject(BuildProjectInfo(_roslynProjectId, snapshot.Name));
         AddHiddenGlobalUsings();
 
+        ProjectFileSnapshot? csprojFile = null;
         foreach (var file in snapshot.Files)
+        {
+            if (csprojFile is null && file.Folders.Count == 0 && file.Name.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase))
+            {
+                csprojFile = file;
+                continue;
+            }
+
             AddFileCore(file.Folders, file.Name, file.Content, file.Id);
+        }
 
         foreach (var folder in snapshot.EmptyFolders)
             _emptyFolders.Add(folder);
 
-        if (snapshot.Packages is { Count: > 0 } packages)
+        if (csprojFile is not null)
         {
-            await _packageManager.RestoreAsync(packages).ConfigureAwait(false);
+            _csprojFileId = csprojFile.Id;
+            _csprojFileName = csprojFile.Name;
+            _csprojContent = csprojFile.Content;
+            await SyncPackagesFromCsprojAsync(_csprojContent).ConfigureAwait(false);
+        }
+        else
+        {
+            // Snapshot predates the .csproj feature — synthesize one, restoring any packages
+            // that were tracked the old way (a separate list on the snapshot) if present.
+            InitializeCsproj(snapshot.Name);
+            if (snapshot.Packages is { Count: > 0 } legacyPackages)
+                await _packageManager.RestoreAsync(legacyPackages).ConfigureAwait(false);
+            RegenerateCsprojPackageReferences();
             ApplyPackageReferences();
         }
 
@@ -114,7 +156,9 @@ public sealed class ProjectWorkspace
             files.Add(new ProjectFileSnapshot(_fileIdByDocId[document.Id], document.Name, document.Folders.ToList(), text.ToString()));
         }
 
-        return new ProjectSnapshot(_projectId, _projectName!, files, _emptyFolders.ToList(), _packageManager.DirectPackages);
+        files.Add(new ProjectFileSnapshot(_csprojFileId, _csprojFileName, Array.Empty<string>(), _csprojContent));
+
+        return new ProjectSnapshot(_projectId, _projectName!, files, _emptyFolders.ToList());
     }
 
     public Task<NuGetSearchResponseDto> SearchPackagesAsync(string query, int skip, int take) =>
@@ -124,6 +168,7 @@ public sealed class ProjectWorkspace
     {
         EnsureProject();
         await _packageManager.InstallAsync(id, version).ConfigureAwait(false);
+        RegenerateCsprojPackageReferences();
         ApplyPackageReferences();
         return BuildProjectDto();
     }
@@ -132,6 +177,7 @@ public sealed class ProjectWorkspace
     {
         EnsureProject();
         _packageManager.Uninstall(id);
+        RegenerateCsprojPackageReferences();
         ApplyPackageReferences();
         return BuildProjectDto();
     }
@@ -163,14 +209,25 @@ public sealed class ProjectWorkspace
     public async Task<string> GetFileContentAsync(string fileId)
     {
         EnsureProject();
+        if (fileId == _csprojFileId)
+            return _csprojContent;
+
         var document = CurrentProject().GetDocument(ResolveFileId(fileId))!;
         var text = await document.GetTextAsync().ConfigureAwait(false);
         return text.ToString();
     }
 
-    public void UpdateFileContent(string fileId, string content)
+    public async Task UpdateFileContent(string fileId, string content)
     {
         EnsureProject();
+        if (fileId == _csprojFileId)
+        {
+            _csprojContent = content;
+            await SyncPackagesFromCsprojAsync(content).ConfigureAwait(false);
+            _lastCompiledAssembly = null;
+            return;
+        }
+
         var docId = ResolveFileId(fileId);
         var solution = _workspace!.CurrentSolution.WithDocumentText(docId, SourceText.From(content));
         _workspace.TryApplyChanges(solution);
@@ -199,6 +256,9 @@ public sealed class ProjectWorkspace
     public IReadOnlyList<ProjectFileNode> RenameEntry(string id, string newName)
     {
         EnsureProject();
+        if (id == _csprojFileId)
+            throw new InvalidOperationException("The project file cannot be renamed.");
+
         if (_docIdByFileId.TryGetValue(id, out var docId))
         {
             var document = CurrentProject().GetDocument(docId)!;
@@ -218,6 +278,9 @@ public sealed class ProjectWorkspace
     public IReadOnlyList<ProjectFileNode> DeleteEntry(string id)
     {
         EnsureProject();
+        if (id == _csprojFileId)
+            throw new InvalidOperationException("The project file cannot be deleted.");
+
         if (_docIdByFileId.TryGetValue(id, out var docId))
         {
             var solution = _workspace!.CurrentSolution.RemoveDocument(docId);
@@ -609,6 +672,125 @@ public sealed class ProjectWorkspace
         _roslynProjectId = null;
         _lastCompiledAssembly = null;
         _packageManager.Reset();
+        _csprojFileId = "";
+        _csprojFileName = "";
+        _csprojContent = "";
+    }
+
+    private void InitializeCsproj(string name)
+    {
+        _csprojFileId = Guid.NewGuid().ToString("n");
+        _csprojFileName = $"{name}.csproj";
+        _csprojContent = CsprojTemplate;
+    }
+
+    /// <summary>Rewrites the &lt;PackageReference&gt; items in the .csproj to match the package
+    /// manager's current direct packages — called whenever installs/uninstalls originate from the
+    /// NuGet panel (as opposed to the user hand-editing the .csproj, which is the reverse direction
+    /// handled by <see cref="SyncPackagesFromCsprojAsync"/>).</summary>
+    private void RegenerateCsprojPackageReferences()
+    {
+        XDocument doc;
+        try
+        {
+            doc = XDocument.Parse(_csprojContent);
+        }
+        catch (System.Xml.XmlException)
+        {
+            // The user broke the XML by hand; leave their text alone rather than clobbering it.
+            return;
+        }
+
+        var root = doc.Root;
+        if (root is null) return;
+
+        var packageRefs = root.Elements("ItemGroup").Elements("PackageReference").ToList();
+        var packageItemGroup = packageRefs.Count > 0 ? packageRefs[0].Parent : null;
+        foreach (var packageRef in packageRefs)
+            packageRef.Remove();
+
+        var directPackages = _packageManager.DirectPackages
+            .OrderBy(p => p.Id, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (directPackages.Count == 0)
+        {
+            if (packageItemGroup is { HasElements: false })
+                packageItemGroup.Remove();
+        }
+        else
+        {
+            var itemGroup = packageItemGroup;
+            if (itemGroup is null)
+            {
+                itemGroup = new XElement("ItemGroup");
+                root.Add(itemGroup);
+            }
+
+            foreach (var package in directPackages)
+            {
+                itemGroup.Add(new XElement(
+                    "PackageReference",
+                    new XAttribute("Include", package.Id),
+                    new XAttribute("Version", package.Version)));
+            }
+        }
+
+        _csprojContent = doc.ToString() + "\n";
+    }
+
+    /// <summary>Parses &lt;PackageReference&gt; items out of hand-edited .csproj text and installs/
+    /// uninstalls packages to match — the reverse of <see cref="RegenerateCsprojPackageReferences"/>.
+    /// Invalid XML (e.g. mid-keystroke) or an unresolvable id/version is ignored rather than thrown,
+    /// since this runs on every debounced edit of the file.</summary>
+    private async Task SyncPackagesFromCsprojAsync(string content)
+    {
+        List<(string Id, string Version)> parsed;
+        try
+        {
+            var doc = XDocument.Parse(content);
+            parsed = (doc.Root?.Elements("ItemGroup").Elements("PackageReference") ?? Enumerable.Empty<XElement>())
+                .Select(e => (Id: (string?)e.Attribute("Include"), Version: (string?)e.Attribute("Version")))
+                .Where(p => !string.IsNullOrWhiteSpace(p.Id) && !string.IsNullOrWhiteSpace(p.Version))
+                .Select(p => (p.Id!, p.Version!))
+                .ToList();
+        }
+        catch (System.Xml.XmlException)
+        {
+            return;
+        }
+
+        var parsedIds = parsed.Select(p => p.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var current = _packageManager.DirectPackages;
+        var changed = false;
+
+        foreach (var package in current.Where(p => !parsedIds.Contains(p.Id)))
+        {
+            _packageManager.Uninstall(package.Id);
+            changed = true;
+        }
+
+        foreach (var (id, version) in parsed)
+        {
+            var existing = current.FirstOrDefault(p => string.Equals(p.Id, id, StringComparison.OrdinalIgnoreCase));
+            if (existing is not null && existing.Version == version) continue;
+
+            if (existing is not null)
+                _packageManager.Uninstall(id);
+
+            try
+            {
+                await _packageManager.InstallAsync(id, version).ConfigureAwait(false);
+                changed = true;
+            }
+            catch (Exception)
+            {
+                // Unresolvable id/version typed by hand — leave it; it just won't compile until fixed.
+            }
+        }
+
+        if (changed)
+            ApplyPackageReferences();
     }
 
     private void AddHiddenGlobalUsings()
@@ -716,7 +898,9 @@ public sealed class ProjectWorkspace
             d.Folders.Count == folders.Count &&
             StartsWithPath(d.Folders, folders) &&
             d.Name.Equals(name, StringComparison.OrdinalIgnoreCase) &&
-            (excludeFileId is null || _fileIdByDocId[d.Id] != excludeFileId));
+            (excludeFileId is null || _fileIdByDocId[d.Id] != excludeFileId)) ||
+            (folders.Count == 0 && _csprojFileId.Length > 0 && excludeFileId != _csprojFileId &&
+             name.Equals(_csprojFileName, StringComparison.OrdinalIgnoreCase));
 
         var folderConflict = _emptyFolders.Any(f =>
         {
@@ -765,14 +949,22 @@ public sealed class ProjectWorkspace
             folder.Children[document.Name] = new TreeNode { Id = _fileIdByDocId[document.Id], Name = document.Name, Kind = "file" };
         }
 
-        return root.Children.Values.OrderBy(n => n.Kind == "file").ThenBy(n => n.Name, StringComparer.OrdinalIgnoreCase).Select(ToDto).ToList();
+        if (_csprojFileId.Length > 0)
+        {
+            // Sorts after every ordinary file name (regardless of the project's own name) so a
+            // fresh project still opens Program.cs by default rather than the .csproj — the UI
+            // opens whichever file sorts first in the tree.
+            root.Children[_csprojFileName] = new TreeNode { Id = _csprojFileId, Name = _csprojFileName, Kind = "file", SortKey = "￿" + _csprojFileName };
+        }
+
+        return root.Children.Values.OrderBy(n => n.Kind == "file").ThenBy(n => n.SortKey, StringComparer.OrdinalIgnoreCase).Select(ToDto).ToList();
 
         static ProjectFileNode ToDto(TreeNode node) => new(
             node.Id,
             node.Name,
             node.Kind,
             node.Kind == "folder"
-                ? node.Children.Values.OrderBy(n => n.Kind == "file").ThenBy(n => n.Name, StringComparer.OrdinalIgnoreCase).Select(ToDto).ToList()
+                ? node.Children.Values.OrderBy(n => n.Kind == "file").ThenBy(n => n.SortKey, StringComparer.OrdinalIgnoreCase).Select(ToDto).ToList()
                 : null);
     }
 
@@ -781,6 +973,8 @@ public sealed class ProjectWorkspace
         public string Id = "";
         public string Name = "";
         public string Kind = "folder";
+        private string? _sortKey;
+        public string SortKey { get => _sortKey ?? Name; set => _sortKey = value; }
         public Dictionary<string, TreeNode> Children { get; } = new(StringComparer.Ordinal);
     }
 

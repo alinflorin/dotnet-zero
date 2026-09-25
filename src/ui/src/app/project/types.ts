@@ -31,7 +31,9 @@ export interface ProjectSnapshot {
   name: string
   files: ProjectFileSnapshot[]
   emptyFolders: string[]
-  packages: PackageReferenceSnapshot[]
+  /** Legacy-only: packages now live as <PackageReference> items inside the .csproj file in `files`.
+   *  Kept optional so snapshots saved before that change still migrate on load. */
+  packages?: PackageReferenceSnapshot[]
 }
 
 export interface InstalledPackageDto {

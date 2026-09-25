@@ -200,6 +200,7 @@ function FileTreeNode({ node, editing, onSetEditing, onOpenFile, onDelete, commi
   const [hovered, setHovered] = useState(false)
 
   const isFolder = node.kind === "folder"
+  const isProjectFile = node.kind === "file" && node.name.endsWith(".csproj")
   const isRenamingThis = editing?.mode === "rename" && editing.id === node.id
   const childEditing = editing && editing.mode !== "rename" && editing.parentPath === node.id ? editing : null
 
@@ -251,15 +252,19 @@ function FileTreeNode({ node, editing, onSetEditing, onOpenFile, onDelete, commi
               {t("explorer.newFolder")}
             </MenuItem>
           )}
-          <MenuItem
-            icon={<EditRegular />}
-            onClick={() => onSetEditing({ mode: "rename", id: node.id, initialName: node.name })}
-          >
-            {t("explorer.rename")}
-          </MenuItem>
-          <MenuItem icon={<DeleteRegular />} onClick={() => onDelete(node.id)}>
-            {t("explorer.delete")}
-          </MenuItem>
+          {!isProjectFile && (
+            <MenuItem
+              icon={<EditRegular />}
+              onClick={() => onSetEditing({ mode: "rename", id: node.id, initialName: node.name })}
+            >
+              {t("explorer.rename")}
+            </MenuItem>
+          )}
+          {!isProjectFile && (
+            <MenuItem icon={<DeleteRegular />} onClick={() => onDelete(node.id)}>
+              {t("explorer.delete")}
+            </MenuItem>
+          )}
         </MenuList>
       </MenuPopover>
     </Menu>
@@ -280,7 +285,7 @@ function FileTreeNode({ node, editing, onSetEditing, onOpenFile, onDelete, commi
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
       >
-        <TreeItemLayout iconBefore={<DocumentRegular />} actions={menu}>
+        <TreeItemLayout iconBefore={<DocumentRegular />} actions={isProjectFile ? undefined : menu}>
           <span className={styles.rowLabel}>{node.name}</span>
         </TreeItemLayout>
       </TreeItem>

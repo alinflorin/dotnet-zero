@@ -90,6 +90,11 @@ public sealed class DebugWorkspace(ProjectWorkspace project)
         var docIds = new List<(DocumentId Id, string FileId)>();
         foreach (var file in snapshot.Files)
         {
+            // GetSnapshotAsync() includes the project's .csproj alongside the real source files —
+            // it isn't C#, so it must not be fed into this debug compilation.
+            if (file.Folders.Count == 0 && file.Name.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase))
+                continue;
+
             var docId = DocumentId.CreateNewId(projectId);
             adhoc.AddDocument(DocumentInfo.Create(
                 docId,
