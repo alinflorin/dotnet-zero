@@ -29,7 +29,7 @@ public sealed class SolutionWorkspace
     public ProjectWorkspace Project(string projectId) =>
         _projects.TryGetValue(projectId, out var project) ? project : throw new InvalidOperationException($"Project not found: {projectId}");
 
-    public SolutionDto CreateSolution(string name)
+    public SolutionDto CreateSolution(string name, ProjectType projectType = ProjectType.ConsoleNet10)
     {
         _projects.Clear();
         _order.Clear();
@@ -38,21 +38,21 @@ public sealed class SolutionWorkspace
         _solutionName = name;
         _startupProjectId = null;
 
-        AddProjectCore(name);
+        AddProjectCore(name, projectType);
         return BuildSolutionDto();
     }
 
-    public SolutionDto AddProject(string name)
+    public SolutionDto AddProject(string name, ProjectType projectType = ProjectType.ConsoleNet10)
     {
         EnsureUniqueProjectName(name);
-        AddProjectCore(name);
+        AddProjectCore(name, projectType);
         return BuildSolutionDto();
     }
 
-    private void AddProjectCore(string name)
+    private void AddProjectCore(string name, ProjectType projectType)
     {
         var workspace = new ProjectWorkspace();
-        workspace.CreateProject(name);
+        workspace.CreateProject(name, projectType);
         _projects[workspace.Id] = workspace;
         _order.Add(workspace.Id);
         _references[workspace.Id] = new HashSet<string>(StringComparer.Ordinal);

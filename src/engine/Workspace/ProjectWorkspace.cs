@@ -21,29 +21,10 @@ namespace engine.Workspace;
 /// </summary>
 public sealed class ProjectWorkspace
 {
-    private const string DefaultProgramContent = "Console.WriteLine(\"Hello, World!\");\n";
     private const string GlobalUsingsFileName = "GlobalUsings.g.cs";
-    private const string GlobalUsingsContent =
-        "global using System;\n" +
-        "global using System.Collections.Generic;\n" +
-        "global using System.IO;\n" +
-        "global using System.Linq;\n" +
-        "global using System.Threading;\n" +
-        "global using System.Threading.Tasks;\n";
-
-    private const string CsprojTemplate =
-        "<Project Sdk=\"Microsoft.NET.Sdk\">\n" +
-        "\n" +
-        "  <PropertyGroup>\n" +
-        "    <OutputType>Exe</OutputType>\n" +
-        "    <TargetFramework>net10.0</TargetFramework>\n" +
-        "    <ImplicitUsings>enable</ImplicitUsings>\n" +
-        "    <Nullable>enable</Nullable>\n" +
-        "  </PropertyGroup>\n" +
-        "\n" +
-        "</Project>\n";
 
     private AdhocWorkspace? _workspace;
+    private ProjectType _projectType = ProjectType.ConsoleNet10;
     private ProjectId? _roslynProjectId;
     private string _projectId = "";
     private string? _projectName;
@@ -54,8 +35,26 @@ public sealed class ProjectWorkspace
     private byte[]? _lastCompiledAssembly;
     private readonly NuGetPackageManager _packageManager = new();
     private readonly List<MetadataReference> _projectReferenceMetadata = new();
-    private static readonly ImmutableArray<MetadataReference> BaseMetadataReferences =
+
+    private static readonly ImmutableArray<MetadataReference> Net10References =
         Net100.References.All.Cast<MetadataReference>().ToImmutableArray();
+    private static readonly ImmutableArray<MetadataReference> NetStandard20References =
+        NetStandard20.References.All.Cast<MetadataReference>().ToImmutableArray();
+    private static readonly ImmutableArray<MetadataReference> NetStandard21References =
+        NetStandard21.References.All.Cast<MetadataReference>().ToImmutableArray();
+    private static readonly ImmutableArray<MetadataReference> AspNetNet10References =
+        AspNet100.References.All.Cast<MetadataReference>().ToImmutableArray();
+
+    /// <summary>Each reference-assembly set below (from the Basic.Reference.Assemblies packages) is a
+    /// complete, standalone closure for its target framework, not a delta — <see cref="AspNetNet10References"/>
+    /// already includes the full BCL alongside the ASP.NET Core / Extensions assemblies.</summary>
+    private static ImmutableArray<MetadataReference> GetBaseMetadataReferences(ProjectType type) => type switch
+    {
+        ProjectType.LibraryNetStandard20 => NetStandard20References,
+        ProjectType.LibraryNetStandard21 => NetStandard21References,
+        ProjectType.WebApiNet10 => AspNetNet10References,
+        _ => Net10References,
+    };
 
     public string Id => _projectId;
     public string Name => _projectName ?? "";
@@ -88,17 +87,19 @@ public sealed class ProjectWorkspace
         }
     }
 
-    public ProjectDto CreateProject(string name)
+    public ProjectDto CreateProject(string name, ProjectType projectType = ProjectType.ConsoleNet10)
     {
         ResetWorkspace();
         _projectId = Guid.NewGuid().ToString("n");
         _projectName = name;
+        _projectType = projectType;
         _roslynProjectId = ProjectId.CreateNewId(name);
 
         _workspace!.AddProject(BuildProjectInfo(_roslynProjectId, name));
         AddHiddenGlobalUsings();
-        AddFileCore(Array.Empty<string>(), "Program.cs", DefaultProgramContent);
-        InitializeCsproj(name);
+        var (fileName, fileContent) = GetDefaultFile(projectType);
+        AddFileCore(Array.Empty<string>(), fileName, fileContent);
+        InitializeCsproj(name, projectType);
 
         return BuildProjectDto();
     }
@@ -110,18 +111,18 @@ public sealed class ProjectWorkspace
         _projectName = snapshot.Name;
         _roslynProjectId = ProjectId.CreateNewId(snapshot.Name);
 
+        ProjectFileSnapshot? csprojFile = snapshot.Files.FirstOrDefault(
+            f => f.Folders.Count == 0 && f.Name.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase));
+        // Snapshots predating a project type carry no detectable framework/output-type hints, so they
+        // fall back to the original single template (console, net10.0).
+        _projectType = csprojFile is not null ? ParseProjectType(csprojFile.Content) : ProjectType.ConsoleNet10;
+
         _workspace!.AddProject(BuildProjectInfo(_roslynProjectId, snapshot.Name));
         AddHiddenGlobalUsings();
 
-        ProjectFileSnapshot? csprojFile = null;
         foreach (var file in snapshot.Files)
         {
-            if (csprojFile is null && file.Folders.Count == 0 && file.Name.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase))
-            {
-                csprojFile = file;
-                continue;
-            }
-
+            if (csprojFile is not null && file.Id == csprojFile.Id) continue;
             AddFileCore(file.Folders, file.Name, file.Content, file.Id);
         }
 
@@ -138,10 +139,41 @@ public sealed class ProjectWorkspace
         else
         {
             // Snapshot predates the .csproj feature — synthesize a blank one.
-            InitializeCsproj(snapshot.Name);
+            InitializeCsproj(snapshot.Name, _projectType);
         }
 
         return BuildProjectDto();
+    }
+
+    /// <summary>Recovers the project type from a persisted/hand-edited .csproj — the reverse of
+    /// <see cref="BuildCsprojContent"/> — so reloading a snapshot compiles with the same output kind and
+    /// reference-assembly set it was created with instead of always falling back to console/net10.0.</summary>
+    private static ProjectType ParseProjectType(string csprojContent)
+    {
+        try
+        {
+            var root = XDocument.Parse(csprojContent).Root;
+            if (root is null) return ProjectType.ConsoleNet10;
+
+            var sdk = (string?)root.Attribute("Sdk") ?? "";
+            if (sdk.Equals("Microsoft.NET.Sdk.Web", StringComparison.OrdinalIgnoreCase))
+                return ProjectType.WebApiNet10;
+
+            var targetFramework = root.Elements("PropertyGroup").Elements("TargetFramework").FirstOrDefault()?.Value ?? "";
+            if (targetFramework.Equals("netstandard2.0", StringComparison.OrdinalIgnoreCase))
+                return ProjectType.LibraryNetStandard20;
+            if (targetFramework.Equals("netstandard2.1", StringComparison.OrdinalIgnoreCase))
+                return ProjectType.LibraryNetStandard21;
+
+            var outputType = root.Elements("PropertyGroup").Elements("OutputType").FirstOrDefault()?.Value ?? "";
+            return outputType.Equals("Library", StringComparison.OrdinalIgnoreCase)
+                ? ProjectType.LibraryNet10
+                : ProjectType.ConsoleNet10;
+        }
+        catch (System.Xml.XmlException)
+        {
+            return ProjectType.ConsoleNet10;
+        }
     }
 
     public async Task<ProjectSnapshot> GetSnapshotAsync()
@@ -191,7 +223,7 @@ public sealed class ProjectWorkspace
     /// compiled assemblies of any referenced sibling projects — used both for this workspace's own
     /// compilation and by <see cref="DebugWorkspace"/>'s separate debug-instrumented one.</summary>
     public IReadOnlyList<MetadataReference> GetMetadataReferences() =>
-        BaseMetadataReferences.Concat(_packageManager.References).Concat(_projectReferenceMetadata).ToImmutableArray();
+        GetBaseMetadataReferences(_projectType).Concat(_packageManager.References).Concat(_projectReferenceMetadata).ToImmutableArray();
 
     /// <summary>Supplies the compiled output of the projects this one references (see
     /// <see cref="SolutionWorkspace.SetProjectReferences"/>) as additional metadata references, so this
@@ -711,11 +743,11 @@ public sealed class ProjectWorkspace
         _csprojContent = "";
     }
 
-    private void InitializeCsproj(string name)
+    private void InitializeCsproj(string name, ProjectType projectType)
     {
         _csprojFileId = Guid.NewGuid().ToString("n");
         _csprojFileName = $"{name}.csproj";
-        _csprojContent = CsprojTemplate;
+        _csprojContent = BuildCsprojContent(projectType);
     }
 
     /// <summary>Rewrites the &lt;ProjectReference&gt; items in the .csproj to match
@@ -880,21 +912,95 @@ public sealed class ProjectWorkspace
             documentId,
             GlobalUsingsFileName,
             sourceCodeKind: SourceCodeKind.Regular,
-            loader: TextLoader.From(TextAndVersion.Create(SourceText.From(GlobalUsingsContent), VersionStamp.Create())));
+            loader: TextLoader.From(TextAndVersion.Create(SourceText.From(GetGlobalUsingsContent(_projectType)), VersionStamp.Create())));
 
         _workspace!.AddDocument(documentInfo);
         _hiddenDocumentIds.Add(documentId);
     }
 
-    private static ProjectInfo BuildProjectInfo(ProjectId projectId, string name) => ProjectInfo.Create(
+    private ProjectInfo BuildProjectInfo(ProjectId projectId, string name) => ProjectInfo.Create(
         projectId,
         VersionStamp.Create(),
         name,
         name,
         LanguageNames.CSharp,
-        compilationOptions: new CSharpCompilationOptions(OutputKind.ConsoleApplication, nullableContextOptions: NullableContextOptions.Enable),
+        compilationOptions: new CSharpCompilationOptions(GetOutputKind(_projectType), nullableContextOptions: NullableContextOptions.Enable),
         parseOptions: new CSharpParseOptions(LanguageVersion.Latest),
-        metadataReferences: Net100.References.All);
+        metadataReferences: GetBaseMetadataReferences(_projectType));
+
+    private static OutputKind GetOutputKind(ProjectType type) => type switch
+    {
+        ProjectType.LibraryNet10 or ProjectType.LibraryNetStandard20 or ProjectType.LibraryNetStandard21 => OutputKind.DynamicallyLinkedLibrary,
+        _ => OutputKind.ConsoleApplication,
+    };
+
+    private static (string FileName, string Content) GetDefaultFile(ProjectType type) => type switch
+    {
+        ProjectType.LibraryNet10 or ProjectType.LibraryNetStandard20 or ProjectType.LibraryNetStandard21 =>
+            ("Class1.cs", "public class Class1\n{\n}\n"),
+        ProjectType.WebApiNet10 =>
+            ("Program.cs",
+                "var builder = WebApplication.CreateBuilder(args);\n" +
+                "\n" +
+                "var app = builder.Build();\n" +
+                "\n" +
+                "app.MapGet(\"/\", () => \"Hello, World!\");\n" +
+                "\n" +
+                "app.Run();\n"),
+        _ => ("Program.cs", "Console.WriteLine(\"Hello, World!\");\n"),
+    };
+
+    private static string GetGlobalUsingsContent(ProjectType type)
+    {
+        var usings =
+            "global using System;\n" +
+            "global using System.Collections.Generic;\n" +
+            "global using System.IO;\n" +
+            "global using System.Linq;\n" +
+            "global using System.Threading;\n" +
+            "global using System.Threading.Tasks;\n";
+
+        if (type == ProjectType.WebApiNet10)
+        {
+            usings +=
+                "global using Microsoft.AspNetCore.Builder;\n" +
+                "global using Microsoft.AspNetCore.Hosting;\n" +
+                "global using Microsoft.AspNetCore.Http;\n" +
+                "global using Microsoft.Extensions.Configuration;\n" +
+                "global using Microsoft.Extensions.DependencyInjection;\n" +
+                "global using Microsoft.Extensions.Hosting;\n" +
+                "global using Microsoft.Extensions.Logging;\n";
+        }
+
+        return usings;
+    }
+
+    private static string BuildCsprojContent(ProjectType type)
+    {
+        var (sdk, targetFramework, outputTypeLine) = type switch
+        {
+            ProjectType.ConsoleNet10 => ("Microsoft.NET.Sdk", "net10.0", "    <OutputType>Exe</OutputType>\n"),
+            // Explicit even though Library is the SDK default — HydrateProjectAsync (via ParseProjectType)
+            // needs it to tell LibraryNet10 apart from ConsoleNet10 when both target net10.0.
+            ProjectType.LibraryNet10 => ("Microsoft.NET.Sdk", "net10.0", "    <OutputType>Library</OutputType>\n"),
+            ProjectType.LibraryNetStandard20 => ("Microsoft.NET.Sdk", "netstandard2.0", ""),
+            ProjectType.LibraryNetStandard21 => ("Microsoft.NET.Sdk", "netstandard2.1", ""),
+            ProjectType.WebApiNet10 => ("Microsoft.NET.Sdk.Web", "net10.0", ""),
+            _ => throw new ArgumentOutOfRangeException(nameof(type), type, null),
+        };
+
+        return
+            $"<Project Sdk=\"{sdk}\">\n" +
+            "\n" +
+            "  <PropertyGroup>\n" +
+            outputTypeLine +
+            $"    <TargetFramework>{targetFramework}</TargetFramework>\n" +
+            "    <ImplicitUsings>enable</ImplicitUsings>\n" +
+            "    <Nullable>enable</Nullable>\n" +
+            "  </PropertyGroup>\n" +
+            "\n" +
+            "</Project>\n";
+    }
 
     private void AddFileCore(IReadOnlyList<string> folders, string name, string content, string? existingId = null)
     {

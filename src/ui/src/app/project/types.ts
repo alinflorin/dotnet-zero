@@ -1,3 +1,5 @@
+export type ProjectType = "ConsoleNet10" | "LibraryNet10" | "LibraryNetStandard20" | "LibraryNetStandard21" | "WebApiNet10"
+
 export type ProjectFileKind = "file" | "folder"
 
 export interface ProjectFileNode {

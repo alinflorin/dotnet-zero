@@ -13,6 +13,7 @@ import {
   DialogContent,
   DialogActions,
   Input,
+  Field,
   Tooltip,
   Menu,
   MenuTrigger,
@@ -36,6 +37,8 @@ import { isFileSystemAccessSupported } from "../../app/project/diskSync"
 import { ProjectNode } from "./ProjectNode"
 import { NamePromptDialog } from "../common/NamePromptDialog"
 import { ConfirmDialog } from "../common/ConfirmDialog"
+import { ProjectTypeSelect } from "../common/ProjectTypeSelect"
+import type { ProjectType } from "../../app/project/types"
 
 const fsAccessSupported = isFileSystemAccessSupported()
 
@@ -97,7 +100,9 @@ export function ExplorerPanel() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [addProjectOpen, setAddProjectOpen] = useState(false)
   const [projectName, setProjectName] = useState("NewSolution1")
+  const [projectType, setProjectType] = useState<ProjectType>("ConsoleNet10")
   const [newProjectName, setNewProjectName] = useState("Project2")
+  const [newProjectType, setNewProjectType] = useState<ProjectType>("ConsoleNet10")
   const [newSolutionInFolderOpen, setNewSolutionInFolderOpen] = useState(false)
   const [newSolutionOpen, setNewSolutionOpen] = useState(false)
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false)
@@ -124,7 +129,7 @@ export function ExplorerPanel() {
                   const name = projectName.trim()
                   if (!name) return
                   setDialogOpen(false)
-                  void project.createSolution(name)
+                  void project.createSolution(name, projectType)
                 }}
               >
                 <DialogBody>
@@ -136,6 +141,9 @@ export function ExplorerPanel() {
                       onChange={(_, data) => setProjectName(data.value)}
                       placeholder={t("solution.newSolutionNamePlaceholder")}
                     />
+                    <Field label={t("projectType.label")} style={{ marginTop: "8px" }}>
+                      <ProjectTypeSelect value={projectType} onChange={setProjectType} />
+                    </Field>
                   </DialogContent>
                   <DialogActions>
                     <DialogTrigger disableButtonEnhancement>
@@ -172,7 +180,8 @@ export function ExplorerPanel() {
           title={t("solution.newSolutionInFolder")}
           placeholder={t("solution.newSolutionNamePlaceholder")}
           confirmLabel={t("common.create")}
-          onSubmit={(name) => void project.newSolutionInFolder(name)}
+          showProjectType
+          onSubmit={(name, type) => void project.newSolutionInFolder(name, type)}
         />
       </div>
     )
@@ -260,7 +269,7 @@ export function ExplorerPanel() {
               const name = newProjectName.trim()
               if (!name) return
               setAddProjectOpen(false)
-              void project.addProject(name)
+              void project.addProject(name, newProjectType)
             }}
           >
             <DialogBody>
@@ -272,6 +281,9 @@ export function ExplorerPanel() {
                   onChange={(_, data) => setNewProjectName(data.value)}
                   placeholder={t("sidebar.projectNamePlaceholder")}
                 />
+                <Field label={t("projectType.label")} style={{ marginTop: "8px" }}>
+                  <ProjectTypeSelect value={newProjectType} onChange={setNewProjectType} />
+                </Field>
               </DialogContent>
               <DialogActions>
                 <DialogTrigger disableButtonEnhancement>
@@ -291,7 +303,8 @@ export function ExplorerPanel() {
         title={t("solution.newSolutionInFolder")}
         placeholder={t("solution.newSolutionNamePlaceholder")}
         confirmLabel={t("common.create")}
-        onSubmit={(name) => void project.newSolutionInFolder(name)}
+        showProjectType
+        onSubmit={(name, type) => void project.newSolutionInFolder(name, type)}
       />
       <NamePromptDialog
         open={newSolutionOpen}
@@ -299,7 +312,8 @@ export function ExplorerPanel() {
         title={t("solution.newSolution")}
         placeholder={t("solution.newSolutionNamePlaceholder")}
         confirmLabel={t("common.create")}
-        onSubmit={(name) => void project.createSolution(name)}
+        showProjectType
+        onSubmit={(name, type) => void project.createSolution(name, type)}
       />
       <ConfirmDialog
         open={closeConfirmOpen}

@@ -5,6 +5,7 @@ import type {
   ProjectDto,
   ProjectFileNode,
   ProjectReferenceGraph,
+  ProjectType,
   RunResult,
 } from "./types"
 
@@ -50,13 +51,13 @@ export interface ProjectContextValue {
   pendingCreate: PendingCreate | null
   folderLinkStatus: FolderLinkStatus
   linkedFolderName: string | null
-  createSolution: (name: string) => Promise<void>
-  newSolutionInFolder: (name: string) => Promise<void>
+  createSolution: (name: string, projectType?: ProjectType) => Promise<void>
+  newSolutionInFolder: (name: string, projectType?: ProjectType) => Promise<void>
   openSolutionFromFolder: () => Promise<void>
   reconnectFolder: () => Promise<void>
   unlinkFolder: () => Promise<void>
   closeSolution: () => Promise<void>
-  addProject: (name: string) => Promise<void>
+  addProject: (name: string, projectType?: ProjectType) => Promise<void>
   removeProject: (projectId: string) => Promise<void>
   renameProject: (projectId: string, newName: string) => Promise<void>
   setStartupProject: (projectId: string) => Promise<void>

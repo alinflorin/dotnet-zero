@@ -8,7 +8,8 @@ public static class ProjectApi
     internal static readonly SolutionWorkspace Solution = new();
 
     [JSInvokable]
-    public static SolutionDto CreateSolution(string name) => Solution.CreateSolution(name);
+    public static SolutionDto CreateSolution(string name, string? projectType = null) =>
+        Solution.CreateSolution(name, ParseProjectType(projectType));
 
     [JSInvokable]
     public static Task<SolutionDto> HydrateSolution(SolutionSnapshot snapshot) => Solution.HydrateAsync(snapshot);
@@ -17,7 +18,11 @@ public static class ProjectApi
     public static Task<SolutionSnapshot> GetSolutionSnapshot() => Solution.GetSnapshotAsync();
 
     [JSInvokable]
-    public static SolutionDto AddProject(string name) => Solution.AddProject(name);
+    public static SolutionDto AddProject(string name, string? projectType = null) =>
+        Solution.AddProject(name, ParseProjectType(projectType));
+
+    private static ProjectType ParseProjectType(string? value) =>
+        Enum.TryParse<ProjectType>(value, out var type) ? type : ProjectType.ConsoleNet10;
 
     [JSInvokable]
     public static SolutionDto RemoveProject(string projectId) => Solution.RemoveProject(projectId);

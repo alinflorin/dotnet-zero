@@ -28,6 +28,7 @@ import type {
   NuGetSearchResponseDto,
   ProjectDto,
   ProjectFileNode,
+  ProjectType,
   RunResult,
   SolutionDto,
   SolutionSnapshot,
@@ -168,8 +169,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   )
 
   const createSolution = useCallback(
-    async (name: string) => {
-      const created = await invoke<SolutionDto>("CreateSolution", name)
+    async (name: string, projectType?: ProjectType) => {
+      const created = await invoke<SolutionDto>("CreateSolution", name, projectType)
       applySolution(created)
       setEditorState(EMPTY_EDITOR_STATE)
       setDirtyFileIds(new Set())
@@ -198,10 +199,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const newSolutionInFolder = useCallback(
-    async (name: string) => {
+    async (name: string, projectType?: ProjectType) => {
       const handle = await pickWritableDirectory("zero-new-solution")
       if (!handle) return
-      await createSolution(name)
+      await createSolution(name, projectType)
       const snapshot = await invoke<SolutionSnapshot>("GetSolutionSnapshot")
       await writeSolutionSnapshotToDirectory(handle, snapshot)
       await saveLinkedFolderHandle(handle)
@@ -252,8 +253,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const addProject = useCallback(
-    async (name: string) => {
-      const updated = await invoke<SolutionDto>("AddProject", name)
+    async (name: string, projectType?: ProjectType) => {
+      const updated = await invoke<SolutionDto>("AddProject", name, projectType)
       applySolution(updated)
       await persistSnapshot()
     },
