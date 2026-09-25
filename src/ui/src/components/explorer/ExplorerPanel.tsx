@@ -25,11 +25,17 @@ import {
   ArrowDownloadRegular,
   DismissCircleRegular,
   FolderAddRegular,
+  FolderOpenRegular,
+  FolderSyncRegular,
   MoreHorizontalRegular,
+  PlugDisconnectedRegular,
 } from "@fluentui/react-icons"
 import { useTranslation } from "react-i18next"
 import { useProject } from "../../app/project/project-context"
+import { isFileSystemAccessSupported } from "../../app/project/diskSync"
 import { ProjectNode } from "./ProjectNode"
+
+const fsAccessSupported = isFileSystemAccessSupported()
 
 const useStyles = makeStyles({
   empty: {
@@ -138,11 +144,29 @@ export function ExplorerPanel() {
               </form>
             </DialogSurface>
           </Dialog>
-          <Tooltip content={t("sidebar.openFolderComingSoon")} relationship="label">
-            <Button appearance="secondary" size="small" disabled>
-              {t("sidebar.openFolder")}
-            </Button>
-          </Tooltip>
+          {fsAccessSupported ? (
+            <>
+              <Button
+                appearance="secondary"
+                size="small"
+                onClick={() => {
+                  const name = window.prompt(t("solution.newSolutionNamePlaceholder"))
+                  if (name?.trim()) void project.newSolutionInFolder(name.trim())
+                }}
+              >
+                {t("solution.newSolutionInFolder")}
+              </Button>
+              <Button appearance="secondary" size="small" onClick={() => void project.openSolutionFromFolder()}>
+                {t("solution.openFromFolder")}
+              </Button>
+            </>
+          ) : (
+            <Tooltip content={t("sidebar.openFolderComingSoon")} relationship="label">
+              <Button appearance="secondary" size="small" disabled>
+                {t("sidebar.openFolder")}
+              </Button>
+            </Tooltip>
+          )}
         </div>
       </div>
     )
@@ -183,6 +207,35 @@ export function ExplorerPanel() {
                 <MenuItem icon={<ArrowDownloadRegular />} onClick={() => void project.exportSlnx()}>
                   {t("solution.exportSlnx")}
                 </MenuItem>
+                <MenuItem icon={<ArrowDownloadRegular />} onClick={() => void project.exportZip()}>
+                  {t("solution.exportZip")}
+                </MenuItem>
+                {fsAccessSupported && (
+                  <>
+                    <MenuItem
+                      icon={<FolderAddRegular />}
+                      onClick={() => {
+                        const name = window.prompt(t("solution.newSolutionNamePlaceholder"))
+                        if (name?.trim()) void project.newSolutionInFolder(name.trim())
+                      }}
+                    >
+                      {t("solution.newSolutionInFolder")}
+                    </MenuItem>
+                    <MenuItem icon={<FolderOpenRegular />} onClick={() => void project.openSolutionFromFolder()}>
+                      {t("solution.openFromFolder")}
+                    </MenuItem>
+                  </>
+                )}
+                {project.folderLinkStatus === "linked" && (
+                  <MenuItem icon={<PlugDisconnectedRegular />} onClick={() => void project.unlinkFolder()}>
+                    {t("solution.unlinkFolder", { name: project.linkedFolderName })}
+                  </MenuItem>
+                )}
+                {project.folderLinkStatus === "permission-needed" && (
+                  <MenuItem icon={<FolderSyncRegular />} onClick={() => void project.reconnectFolder()}>
+                    {t("solution.reconnectFolder", { name: project.linkedFolderName })}
+                  </MenuItem>
+                )}
                 <MenuItem
                   icon={<DismissCircleRegular />}
                   onClick={() => {

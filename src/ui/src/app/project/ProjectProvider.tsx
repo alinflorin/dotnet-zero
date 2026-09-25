@@ -2,10 +2,25 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useDotNet } from "../../hooks/useDotNet"
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback"
 import { ensureBlazorReady } from "../blazor/blazorReady"
-import { ProjectContext, type ExplorerSelection, type OpenFile, type PendingCreate, type ProjectStatus } from "./project-context"
+import {
+  ProjectContext,
+  type ExplorerSelection,
+  type FolderLinkStatus,
+  type OpenFile,
+  type PendingCreate,
+  type ProjectStatus,
+} from "./project-context"
 import { clearSolutionSnapshot, loadSolutionSnapshot, saveSolutionSnapshot } from "./persistence"
 import { setFileProjectRegistry } from "./fileProjectRegistry"
 import { findFirstFile, flattenFiles } from "./treeUtils"
+import {
+  isFileSystemAccessSupported,
+  pickWritableDirectory,
+  readSolutionSnapshotFromDirectory,
+  verifyReadWritePermission,
+  writeSolutionSnapshotToDirectory,
+} from "./diskSync"
+import { clearLinkedFolderHandle, loadLinkedFolderHandle, saveLinkedFolderHandle } from "./folderLinkPersistence"
 import type {
   CompileResult,
   NuGetSearchResponseDto,
@@ -42,11 +57,22 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const [pendingCreate, setPendingCreate] = useState<PendingCreate | null>(null)
   const [editorState, setEditorState] = useState<EditorState>(EMPTY_EDITOR_STATE)
   const [dirtyFileIds, setDirtyFileIds] = useState<ReadonlySet<string>>(new Set())
+  const [linkedFolderHandle, setLinkedFolderHandle] = useState<FileSystemDirectoryHandle | null>(null)
+  const [folderLinkStatus, setFolderLinkStatus] = useState<FolderLinkStatus>(
+    isFileSystemAccessSupported() ? "none" : "unsupported",
+  )
 
   const editorStateRef = useRef(editorState)
   useEffect(() => {
     editorStateRef.current = editorState
   }, [editorState])
+
+  // persistSnapshot reads this instead of taking a dependency on the state directly, so its own
+  // identity (and every callback that depends on it) doesn't change every time the folder link does.
+  const linkedFolderRef = useRef({ handle: linkedFolderHandle, status: folderLinkStatus })
+  useEffect(() => {
+    linkedFolderRef.current = { handle: linkedFolderHandle, status: folderLinkStatus }
+  }, [linkedFolderHandle, folderLinkStatus])
 
   const applySolution = useCallback((next: SolutionDto) => {
     setSolution(next)
@@ -76,6 +102,16 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const persistSnapshot = useCallback(async () => {
     const snapshot = await invoke<SolutionSnapshot>("GetSolutionSnapshot")
     await saveSolutionSnapshot(snapshot)
+
+    const { handle, status } = linkedFolderRef.current
+    if (handle && status === "linked") {
+      try {
+        await writeSolutionSnapshotToDirectory(handle, snapshot)
+      } catch (error) {
+        console.error("Failed to sync solution to its linked folder", error)
+        setFolderLinkStatus("permission-needed")
+      }
+    }
   }, [invoke])
 
   useEffect(() => {
@@ -89,6 +125,15 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         if (cancelled) return
         applySolution(hydrated)
         setStatus("ready")
+
+        if (isFileSystemAccessSupported()) {
+          const storedHandle = await loadLinkedFolderHandle()
+          if (cancelled || !storedHandle) return
+          const granted = await verifyReadWritePermission(storedHandle, false)
+          if (cancelled) return
+          setLinkedFolderHandle(storedHandle)
+          setFolderLinkStatus(granted ? "linked" : "permission-needed")
+        }
       } else {
         setStatus("empty")
       }
@@ -137,6 +182,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
   const closeSolution = useCallback(async () => {
     await clearSolutionSnapshot()
+    await clearLinkedFolderHandle()
     setSolution(null)
     setFileProjectRegistry(new Map())
     setSelectedProjectIdState(null)
@@ -144,7 +190,63 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     setPendingCreate(null)
     setEditorState(EMPTY_EDITOR_STATE)
     setDirtyFileIds(new Set())
+    setLinkedFolderHandle(null)
+    setFolderLinkStatus(isFileSystemAccessSupported() ? "none" : "unsupported")
     setStatus("empty")
+  }, [])
+
+  const newSolutionInFolder = useCallback(
+    async (name: string) => {
+      const handle = await pickWritableDirectory("zero-new-solution")
+      if (!handle) return
+      await createSolution(name)
+      const snapshot = await invoke<SolutionSnapshot>("GetSolutionSnapshot")
+      await writeSolutionSnapshotToDirectory(handle, snapshot)
+      await saveLinkedFolderHandle(handle)
+      setLinkedFolderHandle(handle)
+      setFolderLinkStatus("linked")
+    },
+    [invoke, createSolution],
+  )
+
+  const openSolutionFromFolder = useCallback(async () => {
+    const handle = await pickWritableDirectory("zero-open-solution")
+    if (!handle) return
+
+    let snapshot: SolutionSnapshot
+    try {
+      snapshot = await readSolutionSnapshotFromDirectory(handle, handle.name)
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : String(error))
+      return
+    }
+
+    const hydrated = await invoke<SolutionDto>("HydrateSolution", snapshot)
+    applySolution(hydrated)
+    setEditorState(EMPTY_EDITOR_STATE)
+    setDirtyFileIds(new Set())
+    setStatus("ready")
+
+    await saveSolutionSnapshot(await invoke<SolutionSnapshot>("GetSolutionSnapshot"))
+    await saveLinkedFolderHandle(handle)
+    setLinkedFolderHandle(handle)
+    setFolderLinkStatus("linked")
+
+    const firstProject = hydrated.projects[0]
+    const firstFile = firstProject ? findFirstFile(firstProject.files) : undefined
+    if (firstProject && firstFile) await openFile(firstProject.id, firstFile)
+  }, [invoke, applySolution, openFile])
+
+  const reconnectFolder = useCallback(async () => {
+    if (!linkedFolderHandle) return
+    const granted = await verifyReadWritePermission(linkedFolderHandle, true)
+    setFolderLinkStatus(granted ? "linked" : "permission-needed")
+  }, [linkedFolderHandle])
+
+  const unlinkFolder = useCallback(async () => {
+    await clearLinkedFolderHandle()
+    setLinkedFolderHandle(null)
+    setFolderLinkStatus(isFileSystemAccessSupported() ? "none" : "unsupported")
   }, [])
 
   const addProject = useCallback(
@@ -336,6 +438,22 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     [invoke, applyProjectTree, persistSnapshot],
   )
 
+  const exportZip = useCallback(async () => {
+    await flushSync()
+    // Blazor JS interop serializes a byte[] return value as a base64 string.
+    const base64 = await invoke<string>("ExportZip")
+    const binary = atob(base64)
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+    const blob = new Blob([bytes], { type: "application/zip" })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement("a")
+    anchor.href = url
+    anchor.download = `${solution?.name ?? "Solution"}.zip`
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }, [invoke, solution, flushSync])
+
   const compileProject = useCallback(
     async (projectId: string) => {
       await flushSync()
@@ -420,7 +538,13 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       openFiles: editorState.openFiles,
       activeFileId: editorState.activeFileId,
       dirtyFileIds,
+      folderLinkStatus,
+      linkedFolderName: linkedFolderHandle?.name ?? null,
       createSolution,
+      newSolutionInFolder,
+      openSolutionFromFolder,
+      reconnectFolder,
+      unlinkFolder,
       closeSolution,
       addProject,
       removeProject,
@@ -432,6 +556,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       cancelCreate,
       setProjectReferences,
       exportSlnx,
+      exportZip,
       openFile,
       closeFile,
       setActiveFile,
@@ -456,7 +581,13 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       pendingCreate,
       editorState,
       dirtyFileIds,
+      folderLinkStatus,
+      linkedFolderHandle,
       createSolution,
+      newSolutionInFolder,
+      openSolutionFromFolder,
+      reconnectFolder,
+      unlinkFolder,
       closeSolution,
       addProject,
       removeProject,
@@ -468,6 +599,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       cancelCreate,
       setProjectReferences,
       exportSlnx,
+      exportZip,
       openFile,
       closeFile,
       setActiveFile,

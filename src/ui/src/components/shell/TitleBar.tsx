@@ -22,15 +22,22 @@ import {
   BugFilled,
   AddRegular,
   ArrowDownloadRegular,
+  FolderAddRegular,
+  FolderOpenRegular,
+  FolderSyncRegular,
+  PlugDisconnectedRegular,
   bundleIcon,
 } from "@fluentui/react-icons"
 import { useTranslation } from "react-i18next"
 import { useProject } from "../../app/project/project-context"
+import { isFileSystemAccessSupported } from "../../app/project/diskSync"
 
 const Wrench = bundleIcon(WrenchFilled, WrenchRegular)
 const Play = bundleIcon(PlayFilled, PlayRegular)
 const Broom = bundleIcon(BroomFilled, BroomRegular)
 const Bug = bundleIcon(BugFilled, BugRegular)
+
+const fsAccessSupported = isFileSystemAccessSupported()
 
 const useStyles = makeStyles({
   root: {
@@ -81,6 +88,8 @@ interface TitleBarProps {
   onClean?: () => void
   onNewProject?: () => void
   onNewSolution?: () => void
+  onNewSolutionInFolder?: () => void
+  onOpenSolutionFromFolder?: () => void
   isBusy?: boolean
 }
 
@@ -93,6 +102,8 @@ export function TitleBar({
   onClean,
   onNewProject,
   onNewSolution,
+  onNewSolutionInFolder,
+  onOpenSolutionFromFolder,
   isBusy,
 }: TitleBarProps) {
   const styles = useStyles()
@@ -131,6 +142,29 @@ export function TitleBar({
               <MenuItem icon={<ArrowDownloadRegular />} onClick={() => void project.exportSlnx()}>
                 {t("solution.exportSlnx")}
               </MenuItem>
+              <MenuItem icon={<ArrowDownloadRegular />} onClick={() => void project.exportZip()}>
+                {t("solution.exportZip")}
+              </MenuItem>
+              {fsAccessSupported && (
+                <>
+                  <MenuItem icon={<FolderAddRegular />} onClick={onNewSolutionInFolder}>
+                    {t("solution.newSolutionInFolder")}
+                  </MenuItem>
+                  <MenuItem icon={<FolderOpenRegular />} onClick={onOpenSolutionFromFolder}>
+                    {t("solution.openFromFolder")}
+                  </MenuItem>
+                </>
+              )}
+              {project.folderLinkStatus === "linked" && (
+                <MenuItem icon={<PlugDisconnectedRegular />} onClick={() => void project.unlinkFolder()}>
+                  {t("solution.unlinkFolder", { name: project.linkedFolderName })}
+                </MenuItem>
+              )}
+              {project.folderLinkStatus === "permission-needed" && (
+                <MenuItem icon={<FolderSyncRegular />} onClick={() => void project.reconnectFolder()}>
+                  {t("solution.reconnectFolder", { name: project.linkedFolderName })}
+                </MenuItem>
+              )}
             </MenuList>
           </MenuPopover>
         </Menu>

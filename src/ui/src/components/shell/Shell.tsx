@@ -79,7 +79,17 @@ function useIsMobile() {
 export function Shell() {
   const styles = useStyles()
   const { t } = useTranslation()
-  const { compileProject, runStartupProject, cleanProject, selectedProjectId, startupProjectId, addProject, createSolution } = useProject()
+  const {
+    compileProject,
+    runStartupProject,
+    cleanProject,
+    selectedProjectId,
+    startupProjectId,
+    addProject,
+    createSolution,
+    newSolutionInFolder,
+    openSolutionFromFolder,
+  } = useProject()
   const targetProjectId = selectedProjectId ?? startupProjectId
   const { appendLine, clear, panelOpen, showChannel, togglePanel } = useLog()
   const { startDebug } = useDebug()
@@ -171,6 +181,15 @@ export function Shell() {
     if (name?.trim()) void createSolution(name.trim())
   }, [createSolution, t])
 
+  const handleNewSolutionInFolder = useCallback(() => {
+    const name = window.prompt(t("solution.newSolutionNamePlaceholder"))
+    if (name?.trim()) void newSolutionInFolder(name.trim())
+  }, [newSolutionInFolder, t])
+
+  const handleOpenSolutionFromFolder = useCallback(() => {
+    void openSolutionFromFolder()
+  }, [openSolutionFromFolder])
+
   const sidebarPane = useResizablePane({
     axis: "horizontal",
     initialSize: DEFAULT_SIDEBAR_WIDTH,
@@ -211,6 +230,8 @@ export function Shell() {
         onClean={handleClean}
         onNewProject={handleNewProject}
         onNewSolution={handleNewSolution}
+        onNewSolutionInFolder={handleNewSolutionInFolder}
+        onOpenSolutionFromFolder={handleOpenSolutionFromFolder}
         isBusy={isBusy}
       />
       <div className={styles.main}>

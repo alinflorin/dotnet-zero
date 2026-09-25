@@ -17,6 +17,14 @@ export interface OpenFile {
 
 export type ProjectStatus = "loading" | "empty" | "ready"
 
+/** Whether the current solution is mirrored to a folder on disk via the File System Access API.
+ * "unsupported": the browser has no File System Access API (Safari/Firefox) — disk linking is hidden.
+ * "none": supported, but the current solution isn't linked to a folder.
+ * "linked": actively mirroring every save to the linked folder.
+ * "permission-needed": a linked folder was restored from a previous session but needs the user to
+ * re-grant write permission (browsers require a user gesture for this, so it can't happen automatically). */
+export type FolderLinkStatus = "unsupported" | "none" | "linked" | "permission-needed"
+
 export interface ExplorerSelection {
   projectId: string
   /** Id of the selected file/folder entry, or null when the project root itself is selected. */
@@ -43,7 +51,13 @@ export interface ProjectContextValue {
   openFiles: OpenFile[]
   activeFileId: string | null
   dirtyFileIds: ReadonlySet<string>
+  folderLinkStatus: FolderLinkStatus
+  linkedFolderName: string | null
   createSolution: (name: string) => Promise<void>
+  newSolutionInFolder: (name: string) => Promise<void>
+  openSolutionFromFolder: () => Promise<void>
+  reconnectFolder: () => Promise<void>
+  unlinkFolder: () => Promise<void>
   closeSolution: () => Promise<void>
   addProject: (name: string) => Promise<void>
   removeProject: (projectId: string) => Promise<void>
@@ -55,6 +69,7 @@ export interface ProjectContextValue {
   cancelCreate: () => void
   setProjectReferences: (projectId: string, referencedProjectIds: string[]) => Promise<void>
   exportSlnx: () => Promise<void>
+  exportZip: () => Promise<void>
   openFile: (projectId: string, node: ProjectFileNode) => Promise<void>
   closeFile: (fileId: string) => void
   setActiveFile: (fileId: string) => void

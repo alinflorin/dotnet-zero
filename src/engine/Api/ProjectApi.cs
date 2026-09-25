@@ -36,6 +36,9 @@ public static class ProjectApi
     public static string ExportSlnx() => Solution.ExportSlnx();
 
     [JSInvokable]
+    public static Task<byte[]> ExportZip() => Solution.ExportZipAsync();
+
+    [JSInvokable]
     public static IReadOnlyList<ProjectFileNode> GetFileTree(string projectId) => Solution.Project(projectId).GetFileTree();
 
     [JSInvokable]

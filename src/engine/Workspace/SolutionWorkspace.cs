@@ -1,3 +1,5 @@
+using System.IO.Compression;
+using System.Text;
 using System.Xml.Linq;
 using Microsoft.CodeAnalysis;
 
@@ -317,6 +319,41 @@ public sealed class SolutionWorkspace
             _order.Select(id => new XElement("Project", new XAttribute("Path", $"{_projects[id].Name}/{_projects[id].Name}.csproj"))));
 
         return "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" + solutionElement + "\n";
+    }
+
+    /// <summary>Zips every project's files (via the same snapshot content used for persistence) plus
+    /// the .slnx, laid out as {ProjectName}/{folders}/{file} so the archive extracts into a normal
+    /// solution folder on disk.</summary>
+    public async Task<byte[]> ExportZipAsync()
+    {
+        using var stream = new MemoryStream();
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var slnxEntry = archive.CreateEntry($"{_solutionName}.slnx", CompressionLevel.Optimal);
+            await using (var slnxWriter = new StreamWriter(slnxEntry.Open(), Encoding.UTF8))
+                await slnxWriter.WriteAsync(ExportSlnx()).ConfigureAwait(false);
+
+            foreach (var id in _order)
+            {
+                var project = _projects[id];
+                var snapshot = await project.GetSnapshotAsync().ConfigureAwait(false);
+
+                foreach (var folder in snapshot.EmptyFolders)
+                    archive.CreateEntry($"{project.Name}/{folder}/.gitkeep", CompressionLevel.Optimal);
+
+                foreach (var file in snapshot.Files)
+                {
+                    var entryPath = file.Folders.Count == 0
+                        ? $"{project.Name}/{file.Name}"
+                        : $"{project.Name}/{string.Join('/', file.Folders)}/{file.Name}";
+                    var entry = archive.CreateEntry(entryPath, CompressionLevel.Optimal);
+                    await using var writer = new StreamWriter(entry.Open(), Encoding.UTF8);
+                    await writer.WriteAsync(file.Content).ConfigureAwait(false);
+                }
+            }
+        }
+
+        return stream.ToArray();
     }
 
     private IReadOnlyDictionary<string, IReadOnlyList<string>> BuildReferencesDto() =>
