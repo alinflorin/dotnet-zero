@@ -20,6 +20,12 @@ public sealed class SolutionWorkspace
     private readonly Dictionary<string, HashSet<string>> _references = new(StringComparer.Ordinal);
     private readonly DebugWorkspace _debug = new();
 
+    // Projects whose ProjectWorkspace.GetMetadataReferences() may not reflect the referenced
+    // projects' current compiled types yet (reference graph just changed, solution just loaded, or
+    // a project it depends on was just edited) — refreshed lazily, right before the next language
+    // query for that project, by EnsureReferenceMetadataFreshAsync.
+    private readonly HashSet<string> _dirtyReferenceProjects = new(StringComparer.Ordinal);
+
     private string _solutionId = "";
     private string _solutionName = "Solution";
     private string? _startupProjectId;
@@ -69,8 +75,12 @@ public sealed class SolutionWorkspace
         _projects.Remove(projectId);
         _order.Remove(projectId);
         _references.Remove(projectId);
-        foreach (var set in _references.Values)
-            set.Remove(projectId);
+        _dirtyReferenceProjects.Remove(projectId);
+        foreach (var (referencer, set) in _references)
+        {
+            if (set.Remove(projectId))
+                _dirtyReferenceProjects.Add(referencer);
+        }
 
         if (_startupProjectId == projectId)
             _startupProjectId = _order.FirstOrDefault();
@@ -95,7 +105,7 @@ public sealed class SolutionWorkspace
         return BuildSolutionDto();
     }
 
-    public SolutionDto SetProjectReferences(string projectId, IReadOnlyList<string> referencedProjectIds)
+    public async Task<SolutionDto> SetProjectReferences(string projectId, IReadOnlyList<string> referencedProjectIds)
     {
         if (!_projects.ContainsKey(projectId))
             throw new InvalidOperationException("Project not found.");
@@ -120,6 +130,10 @@ public sealed class SolutionWorkspace
         }
 
         SyncReferenceCsprojText(projectId);
+
+        // Newly-referenced projects' types should show up without requiring an explicit Compile/Run first.
+        _dirtyReferenceProjects.Add(projectId);
+        await EnsureReferenceMetadataFreshAsync(projectId).ConfigureAwait(false);
         return BuildSolutionDto();
     }
 
@@ -227,6 +241,85 @@ public sealed class SolutionWorkspace
         return (true, allDiagnostics, compiledBytes);
     }
 
+    /// <summary>Recompiles <paramref name="projectId"/>'s dependency chain and re-wires the resulting
+    /// bytes as its metadata references (same mechanism as <see cref="CompileGraphAsync"/>, used by
+    /// Compile/Run/Debug) so language queries (diagnostics/completions/hover/signature help) see
+    /// referenced projects' types without the user having to Compile/Run first. A no-op if nothing is
+    /// dirty; best-effort otherwise — a dependency with compile errors just leaves this project's view
+    /// of it stale until the error is fixed, rather than failing the language query.</summary>
+    private async Task EnsureReferenceMetadataFreshAsync(string projectId)
+    {
+        if (!_dirtyReferenceProjects.Contains(projectId)) return;
+
+        try
+        {
+            var (success, _, _) = await CompileGraphAsync(projectId).ConfigureAwait(false);
+            if (success)
+                _dirtyReferenceProjects.Remove(projectId);
+        }
+        catch
+        {
+            // Best-effort refresh — leave it dirty so the next language query retries.
+        }
+    }
+
+    /// <summary>Marks every project that (transitively) references <paramref name="projectId"/> as
+    /// needing a metadata refresh, since its compiled output may have just changed. The graph is a DAG
+    /// (enforced in <see cref="SetProjectReferences"/>), so this always terminates.</summary>
+    private void MarkDependentsStale(string projectId)
+    {
+        foreach (var (referencer, dependencies) in _references)
+        {
+            if (dependencies.Contains(projectId) && _dirtyReferenceProjects.Add(referencer))
+                MarkDependentsStale(referencer);
+        }
+    }
+
+    public Task<IReadOnlyList<CompletionItemDto>> GetCompletionsAsync(string projectId, string fileId, string content, int position, string? triggerCharacter) =>
+        WithFreshReferenceMetadataAsync(projectId, () => Project(projectId).GetCompletionsAsync(fileId, content, position, triggerCharacter));
+
+    public Task<HoverDto?> GetHoverAsync(string projectId, string fileId, string content, int position) =>
+        WithFreshReferenceMetadataAsync(projectId, () => Project(projectId).GetHoverAsync(fileId, content, position));
+
+    public Task<SignatureHelpDto?> GetSignatureHelpAsync(string projectId, string fileId, string content, int position, string? triggerCharacter, bool isRetrigger) =>
+        WithFreshReferenceMetadataAsync(projectId, () => Project(projectId).GetSignatureHelpAsync(fileId, content, position, triggerCharacter, isRetrigger));
+
+    public Task<IReadOnlyList<LiveDiagnostic>> GetLiveDiagnosticsAsync(string projectId, string fileId, string content) =>
+        WithFreshReferenceMetadataAsync(projectId, () => Project(projectId).GetLiveDiagnosticsAsync(fileId, content));
+
+    private async Task<T> WithFreshReferenceMetadataAsync<T>(string projectId, Func<Task<T>> query)
+    {
+        await EnsureReferenceMetadataFreshAsync(projectId).ConfigureAwait(false);
+        return await query().ConfigureAwait(false);
+    }
+
+    public IReadOnlyList<ProjectFileNode> AddFile(string projectId, string? parentPath, string name)
+    {
+        var result = Project(projectId).AddFile(parentPath, name);
+        MarkDependentsStale(projectId);
+        return result;
+    }
+
+    public async Task UpdateFileContent(string projectId, string fileId, string content)
+    {
+        await Project(projectId).UpdateFileContent(fileId, content).ConfigureAwait(false);
+        MarkDependentsStale(projectId);
+    }
+
+    public IReadOnlyList<ProjectFileNode> RenameEntry(string projectId, string id, string newName)
+    {
+        var result = Project(projectId).RenameEntry(id, newName);
+        MarkDependentsStale(projectId);
+        return result;
+    }
+
+    public IReadOnlyList<ProjectFileNode> DeleteEntry(string projectId, string id)
+    {
+        var result = Project(projectId).DeleteEntry(id);
+        MarkDependentsStale(projectId);
+        return result;
+    }
+
     public async Task<RunResult> RunAsync(string? projectId)
     {
         var targetId = projectId ?? _startupProjectId ?? throw new InvalidOperationException("No startup project is set.");
@@ -316,6 +409,17 @@ public sealed class SolutionWorkspace
         _startupProjectId = snapshot.StartupProjectId is { } startupId && _projects.ContainsKey(startupId)
             ? startupId
             : _order.FirstOrDefault();
+
+        // Every ProjectWorkspace starts with no referenced-project metadata (SolutionSnapshot doesn't
+        // carry compiled bytes), so seed diagnostics/completions for referencing projects right away
+        // instead of leaving them to show missing-type errors until the user Compiles/Runs.
+        foreach (var id in _order)
+        {
+            if (_references[id].Count > 0)
+                _dirtyReferenceProjects.Add(id);
+        }
+        foreach (var id in _order)
+            await EnsureReferenceMetadataFreshAsync(id).ConfigureAwait(false);
 
         return BuildSolutionDto();
     }

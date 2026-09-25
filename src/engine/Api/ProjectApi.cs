@@ -34,7 +34,7 @@ public static class ProjectApi
     public static SolutionDto SetStartupProject(string projectId) => Solution.SetStartupProject(projectId);
 
     [JSInvokable]
-    public static SolutionDto SetProjectReferences(string projectId, string[] referencedProjectIds) =>
+    public static Task<SolutionDto> SetProjectReferences(string projectId, string[] referencedProjectIds) =>
         Solution.SetProjectReferences(projectId, referencedProjectIds);
 
     [JSInvokable]
@@ -51,7 +51,7 @@ public static class ProjectApi
 
     [JSInvokable]
     public static IReadOnlyList<ProjectFileNode> AddFile(string projectId, string? parentPath, string name) =>
-        Solution.Project(projectId).AddFile(parentPath, name);
+        Solution.AddFile(projectId, parentPath, name);
 
     [JSInvokable]
     public static IReadOnlyList<ProjectFileNode> AddFolder(string projectId, string? parentPath, string name) =>
@@ -59,15 +59,15 @@ public static class ProjectApi
 
     [JSInvokable]
     public static Task UpdateFileContent(string projectId, string fileId, string content) =>
-        Solution.Project(projectId).UpdateFileContent(fileId, content);
+        Solution.UpdateFileContent(projectId, fileId, content);
 
     [JSInvokable]
     public static IReadOnlyList<ProjectFileNode> RenameEntry(string projectId, string id, string newName) =>
-        Solution.Project(projectId).RenameEntry(id, newName);
+        Solution.RenameEntry(projectId, id, newName);
 
     [JSInvokable]
     public static IReadOnlyList<ProjectFileNode> DeleteEntry(string projectId, string id) =>
-        Solution.Project(projectId).DeleteEntry(id);
+        Solution.DeleteEntry(projectId, id);
 
     [JSInvokable]
     public static Task<CompileResult> Compile(string projectId) => Solution.CompileAsync(projectId);
