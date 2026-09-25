@@ -10,6 +10,13 @@
     <WasmFingerprintAssets>false</WasmFingerprintAssets>
     <BlazorFingerprintBlazorJs>false</BlazorFingerprintBlazorJs>
     <WasmEnableHotReload>false</WasmEnableHotReload>
+    <!--
+      Runs language-service work (completions/hover/diagnostics) on background WASM
+      threads instead of the browser's main/UI thread. Requires the page to be served
+      cross-origin-isolated (COOP/COEP headers) for SharedArrayBuffer — see vite.config.ts
+      and public/_headers.
+    -->
+    <WasmEnableThreads>true</WasmEnableThreads>
     <EngineWebAssetsOutputPath>$(MSBuildProjectDirectory)\..\ui\public\engine\</EngineWebAssetsOutputPath>
   </PropertyGroup>
 

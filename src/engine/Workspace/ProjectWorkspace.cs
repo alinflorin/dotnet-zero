@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
+using System.Threading;
 using Basic.Reference.Assemblies;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Completion;
@@ -36,6 +37,26 @@ public sealed class ProjectWorkspace
     private readonly HashSet<string> _emptyFolders = new(StringComparer.Ordinal);
     private readonly HashSet<DocumentId> _hiddenDocumentIds = new();
     private byte[]? _lastCompiledAssembly;
+
+    // Language-service calls (completions/hover/diagnostics) run on background threads
+    // (see GetCompletionsAsync etc.) and race with each other as the user types/moves the
+    // caret. Keying by request kind + file lets a newer request cancel a stale one in flight
+    // instead of both burning CPU on the single Roslyn workspace.
+    private readonly object _requestLock = new();
+    private readonly Dictionary<string, CancellationTokenSource> _pendingRequests = new(StringComparer.Ordinal);
+
+    private CancellationToken BeginRequest(string key)
+    {
+        lock (_requestLock)
+        {
+            if (_pendingRequests.TryGetValue(key, out var existing))
+                existing.Cancel();
+
+            var cts = new CancellationTokenSource();
+            _pendingRequests[key] = cts;
+            return cts.Token;
+        }
+    }
 
     public ProjectDto CreateProject(string name)
     {
@@ -195,59 +216,98 @@ public sealed class ProjectWorkspace
         return await ExecuteAsync(assemblyBytes!, diagnostics).ConfigureAwait(false);
     }
 
-    public async Task<IReadOnlyList<CompletionItemDto>> GetCompletionsAsync(string fileId, string content, int position, string? triggerCharacter)
+    public Task<IReadOnlyList<CompletionItemDto>> GetCompletionsAsync(string fileId, string content, int position, string? triggerCharacter)
     {
+        var cancellationToken = BeginRequest($"completions:{fileId}");
         var document = TransientDocument(fileId, content);
-        var completionService = CompletionService.GetService(document);
-        if (completionService is null) return [];
 
-        var trigger = triggerCharacter is { Length: > 0 }
-            ? CompletionTrigger.CreateInsertionTrigger(triggerCharacter[0])
-            : CompletionTrigger.Invoke;
-
-        var completions = await completionService.GetCompletionsAsync(document, position, trigger).ConfigureAwait(false);
-        return completions.ItemsList
-            .Select(item => new CompletionItemDto(item.DisplayText, item.Tags.FirstOrDefault() ?? "Text", item.DisplayText))
-            .ToList();
-    }
-
-    public async Task<HoverDto?> GetHoverAsync(string fileId, string content, int position)
-    {
-        var document = TransientDocument(fileId, content);
-        var quickInfoService = QuickInfoService.GetService(document);
-        if (quickInfoService is null) return null;
-
-        var quickInfo = await quickInfoService.GetQuickInfoAsync(document, position).ConfigureAwait(false);
-        if (quickInfo is null) return null;
-
-        var markdown = string.Join(
-            "\n\n",
-            quickInfo.Sections
-                .Select(section => string.Concat(section.TaggedParts.Select(part => part.Text)))
-                .Where(text => !string.IsNullOrWhiteSpace(text)));
-
-        if (string.IsNullOrWhiteSpace(markdown)) return null;
-
-        var text = await document.GetTextAsync().ConfigureAwait(false);
-        var (startLine, startColumn, endLine, endColumn) = ToRange(text, quickInfo.Span);
-        return new HoverDto(markdown, startLine, startColumn, endLine, endColumn);
-    }
-
-    public async Task<IReadOnlyList<LiveDiagnostic>> GetLiveDiagnosticsAsync(string fileId, string content)
-    {
-        var document = TransientDocument(fileId, content);
-        var model = await document.GetSemanticModelAsync().ConfigureAwait(false);
-        if (model is null) return [];
-
-        var text = await document.GetTextAsync().ConfigureAwait(false);
-        return model.GetDiagnostics()
-            .Where(d => d.Severity != DiagnosticSeverity.Hidden)
-            .Select(d =>
+        // Offload the actual Roslyn work (semantic analysis) to a thread-pool thread so it
+        // doesn't block the UI thread. Only effective when WasmEnableThreads is on; on a
+        // single-threaded runtime this just runs inline via the thread pool's WASM fallback.
+        return Task.Run<IReadOnlyList<CompletionItemDto>>(async () =>
+        {
+            try
             {
-                var (startLine, startColumn, endLine, endColumn) = ToRange(text, d.Location.SourceSpan);
-                return new LiveDiagnostic(d.Severity.ToString().ToLowerInvariant(), d.GetMessage(), startLine, startColumn, endLine, endColumn);
-            })
-            .ToList();
+                var completionService = CompletionService.GetService(document);
+                if (completionService is null) return [];
+
+                var trigger = triggerCharacter is { Length: > 0 }
+                    ? CompletionTrigger.CreateInsertionTrigger(triggerCharacter[0])
+                    : CompletionTrigger.Invoke;
+
+                var completions = await completionService.GetCompletionsAsync(document, position, trigger, cancellationToken: cancellationToken).ConfigureAwait(false);
+                return completions.ItemsList
+                    .Select(item => new CompletionItemDto(item.DisplayText, item.Tags.FirstOrDefault() ?? "Text", item.DisplayText))
+                    .ToList();
+            }
+            catch (OperationCanceledException)
+            {
+                return [];
+            }
+        }, cancellationToken);
+    }
+
+    public Task<HoverDto?> GetHoverAsync(string fileId, string content, int position)
+    {
+        var cancellationToken = BeginRequest($"hover:{fileId}");
+        var document = TransientDocument(fileId, content);
+
+        return Task.Run<HoverDto?>(async () =>
+        {
+            try
+            {
+                var quickInfoService = QuickInfoService.GetService(document);
+                if (quickInfoService is null) return null;
+
+                var quickInfo = await quickInfoService.GetQuickInfoAsync(document, position, cancellationToken).ConfigureAwait(false);
+                if (quickInfo is null) return null;
+
+                var markdown = string.Join(
+                    "\n\n",
+                    quickInfo.Sections
+                        .Select(section => string.Concat(section.TaggedParts.Select(part => part.Text)))
+                        .Where(text => !string.IsNullOrWhiteSpace(text)));
+
+                if (string.IsNullOrWhiteSpace(markdown)) return null;
+
+                var text = await document.GetTextAsync(cancellationToken).ConfigureAwait(false);
+                var (startLine, startColumn, endLine, endColumn) = ToRange(text, quickInfo.Span);
+                return new HoverDto(markdown, startLine, startColumn, endLine, endColumn);
+            }
+            catch (OperationCanceledException)
+            {
+                return null;
+            }
+        }, cancellationToken);
+    }
+
+    public Task<IReadOnlyList<LiveDiagnostic>> GetLiveDiagnosticsAsync(string fileId, string content)
+    {
+        var cancellationToken = BeginRequest($"diagnostics:{fileId}");
+        var document = TransientDocument(fileId, content);
+
+        return Task.Run<IReadOnlyList<LiveDiagnostic>>(async () =>
+        {
+            try
+            {
+                var model = await document.GetSemanticModelAsync(cancellationToken).ConfigureAwait(false);
+                if (model is null) return [];
+
+                var text = await document.GetTextAsync(cancellationToken).ConfigureAwait(false);
+                return model.GetDiagnostics(cancellationToken: cancellationToken)
+                    .Where(d => d.Severity != DiagnosticSeverity.Hidden)
+                    .Select(d =>
+                    {
+                        var (startLine, startColumn, endLine, endColumn) = ToRange(text, d.Location.SourceSpan);
+                        return new LiveDiagnostic(d.Severity.ToString().ToLowerInvariant(), d.GetMessage(), startLine, startColumn, endLine, endColumn);
+                    })
+                    .ToList();
+            }
+            catch (OperationCanceledException)
+            {
+                return [];
+            }
+        }, cancellationToken);
     }
 
     /// <summary>

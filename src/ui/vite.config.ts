@@ -23,12 +23,38 @@ function reloadOnEngineChange(): Plugin {
   }
 }
 
+// The Blazor engine build (WasmEnableThreads) needs SharedArrayBuffer to run Roslyn work
+// on background WASM threads, which browsers only expose on cross-origin-isolated pages.
+function crossOriginIsolation(): Plugin {
+  const headers = {
+    'Cross-Origin-Opener-Policy': 'same-origin',
+    'Cross-Origin-Embedder-Policy': 'require-corp',
+  }
+
+  return {
+    name: 'cross-origin-isolation',
+    configureServer(server) {
+      server.middlewares.use((_req, res, next) => {
+        for (const [key, value] of Object.entries(headers)) res.setHeader(key, value)
+        next()
+      })
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use((_req, res, next) => {
+        for (const [key, value] of Object.entries(headers)) res.setHeader(key, value)
+        next()
+      })
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
     react(),
     babel({ presets: [reactCompilerPreset()] }),
     reloadOnEngineChange(),
+    crossOriginIsolation(),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'favicon.png', 'apple-touch-icon.png'],

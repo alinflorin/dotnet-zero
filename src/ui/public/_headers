@@ -1,0 +1,7 @@
+# Cross-origin isolation, required for SharedArrayBuffer so the Blazor engine (built with
+# WasmEnableThreads) can run Roslyn work on background WASM threads instead of blocking the
+# UI thread. Recognized by Netlify/Cloudflare Pages; other static hosts need the equivalent
+# configured through their own mechanism (e.g. an nginx/CDN header rule).
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
