@@ -102,6 +102,13 @@ function crossOriginIsolation(): Plugin {
 
 // https://vite.dev/config/
 export default defineConfig({
+  optimizeDeps: {
+    // monaco-editor ships as hundreds of individual ESM files internally.
+    // Without forcing it into the dep pre-bundle, dev mode serves each one
+    // as a separate request instead of the single bundled chunk esbuild
+    // produces here.
+    include: ['monaco-editor', '@monaco-editor/react'],
+  },
   plugins: [
     react(),
     babel({ presets: [reactCompilerPreset()] }),
