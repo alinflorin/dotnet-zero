@@ -1,0 +1,55 @@
+name: Build
+
+on:
+  workflow_call:
+    outputs:
+      artifact-name:
+        description: Name of the uploaded build artifact
+        value: ${{ jobs.build.outputs.artifact-name }}
+
+env:
+  ARTIFACT_NAME: site-dist
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      artifact-name: ${{ env.ARTIFACT_NAME }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: src/ui/package-lock.json
+
+      - name: Restore engine
+        working-directory: src/engine
+        run: dotnet restore
+
+      - name: Build engine
+        working-directory: src/engine
+        run: dotnet build --no-restore -c Release
+
+      - name: Install UI dependencies
+        working-directory: src/ui
+        run: npm ci
+
+      - name: Build UI
+        working-directory: src/ui
+        run: npm run build
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: src/ui/dist
+          if-no-files-found: error
