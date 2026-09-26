@@ -23,6 +23,8 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
+          cache: true
+          cache-dependency-path: src/engine/packages.lock.json
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -33,7 +35,7 @@ jobs:
 
       - name: Restore engine
         working-directory: src/engine
-        run: dotnet restore
+        run: dotnet restore --locked-mode
 
       - name: Build engine
         working-directory: src/engine
