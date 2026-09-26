@@ -432,9 +432,11 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
   const exportZip = useCallback(async () => {
     await flushSync()
-    // Blazor JS interop marshals a byte[] return value directly as a Uint8Array.
+    // Blazor JS interop marshals a byte[] return value directly as a Uint8Array. Its
+    // buffer type is inferred as ArrayBufferLike (which admits SharedArrayBuffer), so copy
+    // it into a fresh Uint8Array to get one backed by a plain ArrayBuffer, which Blob expects.
     const bytes = await invoke<Uint8Array>("ExportZip")
-    const blob = new Blob([bytes], { type: "application/zip" })
+    const blob = new Blob([new Uint8Array(bytes)], { type: "application/zip" })
     const url = URL.createObjectURL(blob)
     const anchor = document.createElement("a")
     anchor.href = url
