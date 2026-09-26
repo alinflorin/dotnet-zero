@@ -8,44 +8,21 @@ permissions:
   contents: write
 
 jobs:
+  build:
+    uses: ./.github/workflows/build.yml
+
   draft-release:
+    needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v6
+      - name: Download UI build artifact
+        uses: actions/download-artifact@v4
         with:
-          dotnet-version: '10.0.x'
-          cache: true
-          cache-dependency-path: src/engine/packages.lock.json
-
-      - name: Setup Node
-        uses: actions/setup-node@v7
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: src/ui/package-lock.json
-
-      - name: Restore engine
-        working-directory: src/engine
-        run: dotnet restore --locked-mode
-
-      - name: Build engine
-        working-directory: src/engine
-        run: dotnet build --no-restore -c Release
-
-      - name: Install UI dependencies
-        working-directory: src/ui
-        run: npm ci
-
-      - name: Build UI
-        working-directory: src/ui
-        run: npm run build
+          name: ui-dist
+          path: dist
 
       - name: Zip build artifact
-        run: (cd src/ui/dist && zip -r ../../../site-dist.zip .)
+        run: (cd dist && zip -r ../site-dist.zip .)
 
       - name: Create draft release
         uses: softprops/action-gh-release@v3
