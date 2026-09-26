@@ -15,6 +15,7 @@
     -->
     <WasmEnableThreads>true</WasmEnableThreads>
     <EngineWebAssetsOutputPath>$(MSBuildProjectDirectory)\..\ui\public\engine\</EngineWebAssetsOutputPath>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
 
   <ItemGroup>
