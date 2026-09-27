@@ -226,6 +226,19 @@ public sealed class ProjectWorkspace
     public IReadOnlyList<MetadataReference> GetMetadataReferences() =>
         GetBaseMetadataReferences(_projectType).Concat(_packageManager.References).Concat(_projectReferenceMetadata).ToImmutableArray();
 
+    /// <summary>This project's framework closure plus its NuGet package references, excluding
+    /// project-reference metadata — for <see cref="SolutionWorkspace.StartDebugAsync"/>, which merges
+    /// referenced projects' sources directly into one compilation instead of referencing their compiled
+    /// bytes, so only one project's framework closure (the debug target's) should end up in that
+    /// compilation to avoid duplicate/ambiguous BCL types.</summary>
+    public IReadOnlyList<MetadataReference> GetFrameworkAndPackageReferences() =>
+        GetBaseMetadataReferences(_projectType).Concat(_packageManager.References).ToImmutableArray();
+
+    /// <summary>This project's NuGet package references only — for other projects in the debug bundle's
+    /// dependency chain (see <see cref="GetFrameworkAndPackageReferences"/>), whose framework closure is
+    /// skipped since the debug target's own closure already covers the merged compilation.</summary>
+    public IReadOnlyList<MetadataReference> GetPackageReferences() => _packageManager.References.ToImmutableArray();
+
     /// <summary>Supplies the compiled output of the projects this one references (see
     /// <see cref="SolutionWorkspace.SetProjectReferences"/>) as additional metadata references, so this
     /// project's compilation can see their public types.</summary>
