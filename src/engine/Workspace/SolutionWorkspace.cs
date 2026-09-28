@@ -354,7 +354,20 @@ public sealed class SolutionWorkspace
 
         var files = new List<ProjectFileSnapshot>();
         var metadataReferences = new List<MetadataReference>();
-        var seenReferences = new HashSet<MetadataReference>();
+        var seenReferences = new HashSet<string>(StringComparer.Ordinal);
+
+        // Every project's source in the chain is merged into one Roslyn compilation below (unlike
+        // Compile/Run, which references each dependency's compiled bytes instead), so only the debug
+        // target's framework closure is included — pulling in every project's own closure (e.g. a
+        // netstandard2.0 dependency's alongside the target's net10 one) would give the compilation two
+        // overlapping BCLs and ambiguous/undefined predefined types.
+        static string ReferenceKey(MetadataReference reference) => reference.Display ?? reference.GetHashCode().ToString();
+
+        foreach (var reference in Project(targetId).GetFrameworkAndPackageReferences())
+        {
+            if (seenReferences.Add(ReferenceKey(reference)))
+                metadataReferences.Add(reference);
+        }
 
         foreach (var id in order)
         {
@@ -370,9 +383,11 @@ public sealed class SolutionWorkspace
                 files.Add(isTarget ? file : file with { Folders = [project.Name, .. file.Folders] });
             }
 
-            foreach (var reference in project.GetMetadataReferences())
+            if (isTarget) continue;
+
+            foreach (var reference in project.GetPackageReferences())
             {
-                if (seenReferences.Add(reference))
+                if (seenReferences.Add(ReferenceKey(reference)))
                     metadataReferences.Add(reference);
             }
         }
